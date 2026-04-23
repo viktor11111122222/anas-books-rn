@@ -1,0 +1,16 @@
+export const colors = {
+  violet: '#7C5CBF',
+  sky: '#5BB8F5',
+  mint: '#4DC9A0',
+  background: '#F7F7FC',
+  textDark: '#1E1E2E',
+  muted: '#ABABC4',
+  muted2: '#9E9EB8',
+  red: '#E8445A',
+  error: '#D94F4F',
+  white: '#FFFFFF',
+  inputBg: '#F4F4FB',
+  cardBorder: '#E0E0F0',
+  heartRed: '#E8445A',
+  gold: '#FFD580',
+};
