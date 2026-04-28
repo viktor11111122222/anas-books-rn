@@ -3,6 +3,10 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   StyleSheet, ActivityIndicator, Linking,
 } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle,
+  withSpring, withSequence, withTiming, withDelay,
+} from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,16 +17,128 @@ import { colors } from '../utils/colors';
 
 const BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
 
+const ANGLES = [0, 60, 120, 180, 240, 300].map(d => (d * Math.PI) / 180);
+const DIST = 26;
+
+function WishlistButton({ isActive, onPress }) {
+  const scale     = useSharedValue(1);
+  const ringScale = useSharedValue(1);
+  const ringOp    = useSharedValue(0);
+
+  const p0x = useSharedValue(0); const p0y = useSharedValue(0); const p0o = useSharedValue(0); const p0s = useSharedValue(0);
+  const p1x = useSharedValue(0); const p1y = useSharedValue(0); const p1o = useSharedValue(0); const p1s = useSharedValue(0);
+  const p2x = useSharedValue(0); const p2y = useSharedValue(0); const p2o = useSharedValue(0); const p2s = useSharedValue(0);
+  const p3x = useSharedValue(0); const p3y = useSharedValue(0); const p3o = useSharedValue(0); const p3s = useSharedValue(0);
+  const p4x = useSharedValue(0); const p4y = useSharedValue(0); const p4o = useSharedValue(0); const p4s = useSharedValue(0);
+  const p5x = useSharedValue(0); const p5y = useSharedValue(0); const p5o = useSharedValue(0); const p5s = useSharedValue(0);
+
+  const heartStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const ringStyle  = useAnimatedStyle(() => ({ transform: [{ scale: ringScale.value }], opacity: ringOp.value }));
+  const ps0 = useAnimatedStyle(() => ({ opacity: p0o.value, transform: [{ translateX: p0x.value }, { translateY: p0y.value }, { scale: p0s.value }] }));
+  const ps1 = useAnimatedStyle(() => ({ opacity: p1o.value, transform: [{ translateX: p1x.value }, { translateY: p1y.value }, { scale: p1s.value }] }));
+  const ps2 = useAnimatedStyle(() => ({ opacity: p2o.value, transform: [{ translateX: p2x.value }, { translateY: p2y.value }, { scale: p2s.value }] }));
+  const ps3 = useAnimatedStyle(() => ({ opacity: p3o.value, transform: [{ translateX: p3x.value }, { translateY: p3y.value }, { scale: p3s.value }] }));
+  const ps4 = useAnimatedStyle(() => ({ opacity: p4o.value, transform: [{ translateX: p4x.value }, { translateY: p4y.value }, { scale: p4s.value }] }));
+  const ps5 = useAnimatedStyle(() => ({ opacity: p5o.value, transform: [{ translateX: p5x.value }, { translateY: p5y.value }, { scale: p5s.value }] }));
+  const particleStyles = [ps0, ps1, ps2, ps3, ps4, ps5];
+
+  function handlePress() {
+    if (!isActive) {
+      scale.value = withSequence(
+        withTiming(1.3, { duration: 150 }),
+        withTiming(1.0, { duration: 200 }),
+      );
+      ringScale.value = 1;
+      ringOp.value = withSequence(
+        withTiming(0.75, { duration: 40 }),
+        withDelay(80, withTiming(0, { duration: 300 })),
+      );
+      ringScale.value = withTiming(2.0, { duration: 380 });
+
+      const allP = [
+        [p0x, p0y, p0o, p0s], [p1x, p1y, p1o, p1s], [p2x, p2y, p2o, p2s],
+        [p3x, p3y, p3o, p3s], [p4x, p4y, p4o, p4s], [p5x, p5y, p5o, p5s],
+      ];
+      allP.forEach(([px, py, po, ps], i) => {
+        const tx = Math.cos(ANGLES[i]) * DIST;
+        const ty = Math.sin(ANGLES[i]) * DIST;
+        px.value = 0; py.value = 0; ps.value = 0; po.value = 0;
+        px.value = withTiming(tx, { duration: 340 });
+        py.value = withTiming(ty, { duration: 340 });
+        ps.value = withSequence(
+          withTiming(1, { duration: 100 }),
+          withDelay(100, withTiming(0, { duration: 180 })),
+        );
+        po.value = withSequence(
+          withTiming(1, { duration: 40 }),
+          withDelay(140, withTiming(0, { duration: 160 })),
+        );
+      });
+    } else {
+      scale.value = withSequence(
+        withTiming(0.8, { duration: 100 }),
+        withTiming(1.0, { duration: 150 }),
+      );
+    }
+    onPress();
+  }
+
+  return (
+    <TouchableOpacity style={wStyles.btn} onPress={handlePress} activeOpacity={1}>
+      <Animated.View style={[wStyles.ring, ringStyle]} pointerEvents="none" />
+      {particleStyles.map((st, i) => (
+        <Animated.View key={i} style={[wStyles.particle, st]} pointerEvents="none" />
+      ))}
+      <Animated.View style={heartStyle}>
+        <Ionicons
+          name={isActive ? 'heart' : 'heart-outline'}
+          size={22}
+          color={isActive ? colors.heartRed : colors.muted}
+        />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+const wStyles = StyleSheet.create({
+  btn: {
+    width: 38, height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  ring: {
+    position: 'absolute',
+    width: 38, height: 38,
+    borderRadius: 19,
+    borderWidth: 2,
+    borderColor: colors.heartRed,
+  },
+  particle: {
+    position: 'absolute',
+    width: 7, height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.heartRed,
+  },
+});
+
 export function BookDetailScreen({ route, navigation }) {
   const { bookId } = route.params;
   const insets = useSafeAreaInsets();
   const { fetchDetail } = useBooks();
-  const { wishlistIds, toggleWishlist } = useAuth();
+  const { wishlistIds, toggleWishlist, libraryIds, toggleLibrary } = useAuth();
 
   const [detail, setDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const isInWishlist = wishlistIds.has(bookId);
+  const isInLibrary  = libraryIds.has(bookId);
 
   useEffect(() => {
     fetchDetail(bookId)
@@ -40,21 +156,15 @@ export function BookDetailScreen({ route, navigation }) {
         <TouchableOpacity style={styles.navBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={22} color={colors.textDark} />
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navBtn}
+        <WishlistButton
+          isActive={isInWishlist}
           onPress={() => detail && toggleWishlist(bookId, {
             title: detail.title, author: detail.author,
             coverUrl: detail.cover_url,
             minPrice: detail.listings.length ? Math.min(...detail.listings.map(l => l.price)) : undefined,
             storeCount: detail.listings.length,
           })}
-        >
-          <Ionicons
-            name={isInWishlist ? 'heart' : 'heart-outline'}
-            size={22}
-            color={isInWishlist ? colors.heartRed : colors.muted}
-          />
-        </TouchableOpacity>
+        />
       </View>
 
       {isLoading ? (
@@ -101,6 +211,25 @@ export function BookDetailScreen({ route, navigation }) {
               <Text style={styles.description}>{detail.description}</Text>
             ) : null}
           </View>
+
+          {/* Library button */}
+          <TouchableOpacity
+            style={[styles.libraryBtn, isInLibrary && styles.libraryBtnActive]}
+            onPress={() => detail && toggleLibrary(bookId, {
+              title: detail.title, author: detail.author,
+              coverUrl: detail.cover_url, minPrice: detail.listings.length ? Math.min(...detail.listings.map(l => l.price)) : undefined,
+            })}
+            activeOpacity={0.85}
+          >
+            <Ionicons
+              name={isInLibrary ? 'checkmark-circle' : 'library'}
+              size={18}
+              color={isInLibrary ? colors.mint : colors.violet}
+            />
+            <Text style={[styles.libraryBtnText, isInLibrary && styles.libraryBtnTextActive]}>
+              {isInLibrary ? 'U biblioteci — ukloni' : 'Dodaj u biblioteku'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Listings */}
           <View style={styles.listingsSection}>
@@ -189,6 +318,19 @@ const styles = StyleSheet.create({
   author: { fontSize: 15, color: colors.violet },
   isbn: { fontSize: 12, color: colors.muted, fontVariant: ['tabular-nums'], marginTop: 4 },
   description: { fontSize: 14, color: '#4A4A6A', lineHeight: 20, marginTop: 12 },
+  libraryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 22, marginTop: 20,
+    paddingVertical: 13, borderRadius: 14,
+    backgroundColor: colors.violet + '12',
+    borderWidth: 1.5, borderColor: colors.violet + '30',
+  },
+  libraryBtnActive: {
+    backgroundColor: colors.mint + '12',
+    borderColor: colors.mint + '40',
+  },
+  libraryBtnText: { fontSize: 15, fontWeight: '600', color: colors.violet },
+  libraryBtnTextActive: { color: colors.mint },
   listingsSection: { paddingHorizontal: 22, paddingTop: 24 },
   listingsTitle: { fontSize: 17, fontWeight: '700', color: colors.textDark, marginBottom: 12 },
   cheapCard: {

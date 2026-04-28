@@ -1,13 +1,14 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, memo } from 'react';
 import {
   View, Text, FlatList, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, RefreshControl, TextInput,
+  StyleSheet, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookCard } from '../components/BookCard';
 import { FeaturedCarousel } from '../components/FeaturedCarousel';
 import { useBooks } from '../hooks/useBooks';
+import { useAuth } from '../context/AuthContext';
 import { colors } from '../utils/colors';
 
 const CATEGORY_LABELS = {
@@ -17,10 +18,21 @@ const CATEGORY_LABELS = {
   biografije: 'Biografije', ostalo: 'Ostalo',
 };
 
+const CategoryChip = memo(function CategoryChip({ label, selected, onPress }) {
+  return (
+    <TouchableOpacity
+      style={[styles.chip, selected && styles.chipSelected]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
+    </TouchableOpacity>
+  );
+});
+
 export function BooksScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const [searchQuery, setSearchQuery] = useState('');
-  const searchTimer = useRef(null);
+  const { libraryIds } = useAuth();
   const {
     books, featuredBooks, categories,
     selectedCategory, setSelectedCategory,
@@ -29,58 +41,44 @@ export function BooksScreen({ navigation }) {
   } = useBooks();
 
   const currentCategory = useRef(null);
-  const currentSearch = useRef('');
+  const currentSearch   = useRef('');
 
   useEffect(() => {
     Promise.all([loadCategories(), loadFeatured(), refresh('', null)]);
   }, []);
 
-  function handleSearchChange(text) {
-    setSearchQuery(text);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
-      currentSearch.current = text;
-      refresh(text, currentCategory.current);
-    }, 400);
-  }
-
-  function handleCategorySelect(cat) {
+const handleCategorySelect = useCallback((cat) => {
     const newCat = selectedCategory === cat ? null : cat;
     setSelectedCategory(newCat);
     currentCategory.current = newCat;
     refresh(currentSearch.current, newCat);
-  }
+  }, [selectedCategory, setSelectedCategory, refresh]);
 
   const handleLoadMore = useCallback(() => {
     if (hasMore && !isLoading) loadMore(currentSearch.current, currentCategory.current);
   }, [hasMore, isLoading, loadMore]);
 
-  const sectionTitle = selectedCategory
+  const handleBookPress = useCallback((bookId) => {
+    navigation.navigate('BookDetail', { bookId });
+  }, [navigation]);
+
+  const handleFeaturedPress = useCallback((book) => {
+    navigation.navigate('BookDetail', { bookId: book.id });
+  }, [navigation]);
+
+  const handleRefresh = useCallback(() => {
+    refresh(currentSearch.current, currentCategory.current);
+  }, [refresh]);
+
+const sectionTitle = selectedCategory
     ? (CATEGORY_LABELS[selectedCategory] ?? selectedCategory)
     : 'Sve knjige';
 
-  const showFeatured = featuredBooks.length > 0 && !selectedCategory && !searchQuery;
+  const filteredFeatured = featuredBooks.filter(b => !libraryIds.has(b.id));
+  const showFeatured = filteredFeatured.length > 0 && !selectedCategory;
 
   const renderHeader = () => (
     <View>
-      {/* Search bar */}
-      <View style={styles.searchBar}>
-        <Ionicons name="search" size={18} color={colors.muted} style={{ marginRight: 10 }} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Pretraži knjige..."
-          placeholderTextColor={colors.muted}
-          value={searchQuery}
-          onChangeText={handleSearchChange}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => { setSearchQuery(''); handleSearchChange(''); }}>
-            <Ionicons name="close-circle" size={18} color={colors.muted} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Categories */}
       {categories.length > 0 && (
         <ScrollView
           horizontal
@@ -100,52 +98,44 @@ export function BooksScreen({ navigation }) {
         </ScrollView>
       )}
 
-      {/* Featured */}
       {showFeatured && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Najpopularnije</Text>
-          <FeaturedCarousel
-            books={featuredBooks}
-            onBookPress={book => navigation.navigate('BookDetail', { bookId: book.id })}
-          />
+          <FeaturedCarousel books={filteredFeatured} onBookPress={handleFeaturedPress} />
         </View>
       )}
 
-      <Text style={[styles.sectionTitle, { paddingHorizontal: 16, marginTop: showFeatured ? 16 : 12, marginBottom: 8 }]}>
+      <Text style={[styles.sectionTitle, { marginTop: showFeatured ? 16 : 12, marginBottom: 8 }]}>
         {sectionTitle}
       </Text>
     </View>
   );
 
-  const renderItem = ({ item }) => (
+  const renderItem = useCallback(({ item }) => (
     <View style={styles.cardWrapper}>
-      <BookCard
-        book={item}
-        onPress={() => navigation.navigate('BookDetail', { bookId: item.id })}
-      />
+      <BookCard book={item} onPress={() => handleBookPress(item.id)} />
     </View>
-  );
+  ), [handleBookPress]);
 
-  const renderFooter = () =>
-    isLoading && books.length > 0 ? (
-      <ActivityIndicator style={{ padding: 20 }} color={colors.violet} />
-    ) : null;
+  const renderFooter = useCallback(() =>
+    isLoading && books.length > 0
+      ? <ActivityIndicator style={{ padding: 20 }} color={colors.violet} />
+      : null,
+  [isLoading, books.length]);
 
-  const renderEmpty = () => {
+  const renderEmpty = useCallback(() => {
     if (isLoading) return null;
     return (
       <View style={styles.emptyState}>
-        <Ionicons
-          name={selectedCategory ? 'filter' : 'library'}
-          size={48}
-          color={colors.muted}
-        />
+        <Ionicons name={selectedCategory ? 'filter' : 'library'} size={48} color={colors.muted} />
         <Text style={styles.emptyText}>
           {selectedCategory ? 'Nema knjiga u ovoj kategoriji' : 'Nema knjiga'}
         </Text>
       </View>
     );
-  };
+  }, [isLoading, selectedCategory]);
+
+  const keyExtractor = useCallback((item) => String(item.id), []);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -160,7 +150,7 @@ export function BooksScreen({ navigation }) {
       ) : (
         <FlatList
           data={books}
-          keyExtractor={item => String(item.id)}
+          keyExtractor={keyExtractor}
           renderItem={renderItem}
           numColumns={2}
           columnWrapperStyle={styles.row}
@@ -172,27 +162,18 @@ export function BooksScreen({ navigation }) {
           refreshControl={
             <RefreshControl
               refreshing={isLoading && books.length === 0}
-              onRefresh={() => refresh(currentSearch.current, currentCategory.current)}
+              onRefresh={handleRefresh}
               tintColor={colors.violet}
             />
           }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
+          maxToRenderPerBatch={6}
+          initialNumToRender={6}
+          windowSize={5}
         />
       )}
     </View>
-  );
-}
-
-function CategoryChip({ label, selected, onPress }) {
-  return (
-    <TouchableOpacity
-      style={[styles.chip, selected && styles.chipSelected]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
-    </TouchableOpacity>
   );
 }
 
@@ -201,42 +182,19 @@ const styles = StyleSheet.create({
   navBar: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.cardBorder,
+    backgroundColor: colors.background,
     alignItems: 'center',
   },
   navTitle: { fontSize: 17, fontWeight: '700', color: colors.textDark },
   centerLoad: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    margin: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-  },
-  searchInput: { flex: 1, fontSize: 15, color: colors.textDark },
-  chipsScroll: {
-    backgroundColor: colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.cardBorder,
-  },
+  chipsScroll: { backgroundColor: colors.background },
   chips: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
-  chip: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    backgroundColor: '#F0EFF8', borderRadius: 20,
-  },
+  chip: { paddingHorizontal: 14, paddingVertical: 7, backgroundColor: '#F0EFF8', borderRadius: 20 },
   chipSelected: { backgroundColor: colors.violet },
   chipText: { fontSize: 13, color: '#6B6B8E' },
   chipTextSelected: { color: colors.white, fontWeight: '600' },
-  section: { marginTop: 12 },
-  sectionTitle: {
-    fontSize: 18, fontWeight: '700', color: colors.textDark,
-  },
+  section: { marginTop: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.textDark, paddingHorizontal: 16, marginBottom: 10 },
   listContent: { paddingBottom: 24 },
   row: { paddingHorizontal: 16, gap: 14, marginBottom: 14 },
   cardWrapper: { flex: 1 },

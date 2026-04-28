@@ -2,48 +2,96 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../utils/colors';
 
-import { LoginScreen } from '../screens/LoginScreen';
-import { RegisterScreen } from '../screens/RegisterScreen';
-import { BooksScreen } from '../screens/BooksScreen';
+import { LoginScreen }      from '../screens/LoginScreen';
+import { RegisterScreen }   from '../screens/RegisterScreen';
+import { BooksScreen }      from '../screens/BooksScreen';
+import { SearchScreen }     from '../screens/SearchScreen';
 import { BookDetailScreen } from '../screens/BookDetailScreen';
 import { AuthorBooksScreen } from '../screens/AuthorBooksScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
+import { ProfileScreen }         from '../screens/ProfileScreen';
+import { PrivacyPolicyScreen }  from '../screens/PrivacyPolicyScreen';
+import { TermsOfServiceScreen } from '../screens/TermsOfServiceScreen';
 
-const Stack = createNativeStackNavigator();
+const SearchNav  = createNativeStackNavigator();
+const HomeNav    = createNativeStackNavigator();
+const ProfileNav = createNativeStackNavigator();
+const AuthNav    = createNativeStackNavigator();
+const Tab        = createBottomTabNavigator();
 
-// ── Tab bar ───────────────────────────────────────────────────────────────────
+// ── Individual stacks ─────────────────────────────────────────────────────────
 
-const TABS = [
-  { key: 'Search',  label: 'Search',  icon: 'search',       iconOutline: 'search-outline' },
-  { key: 'Home',    label: 'Home',    icon: 'home',          iconOutline: 'home-outline' },
-  { key: 'Profile', label: 'Profile', icon: 'person',        iconOutline: 'person-outline' },
-];
+function SearchStack() {
+  return (
+    <SearchNav.Navigator screenOptions={{ headerShown: false }}>
+      <SearchNav.Screen name="SearchMain"  component={SearchScreen} />
+      <SearchNav.Screen name="BookDetail"  component={BookDetailScreen} />
+      <SearchNav.Screen name="AuthorBooks" component={AuthorBooksScreen} />
+    </SearchNav.Navigator>
+  );
+}
 
-function BottomTabBar({ state, navigation }) {
-  const activeKey = state.routeNames[state.index];
+function HomeStack() {
+  return (
+    <HomeNav.Navigator screenOptions={{ headerShown: false }}>
+      <HomeNav.Screen name="HomeMain"    component={BooksScreen} />
+      <HomeNav.Screen name="BookDetail"  component={BookDetailScreen} />
+      <HomeNav.Screen name="AuthorBooks" component={AuthorBooksScreen} />
+    </HomeNav.Navigator>
+  );
+}
+
+function ProfileStack() {
+  return (
+    <ProfileNav.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileNav.Screen name="ProfileMain"    component={ProfileScreen} />
+      <ProfileNav.Screen name="BookDetail"     component={BookDetailScreen} />
+      <ProfileNav.Screen name="AuthorBooks"    component={AuthorBooksScreen} />
+      <ProfileNav.Screen name="PrivacyPolicy"  component={PrivacyPolicyScreen} />
+      <ProfileNav.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+    </ProfileNav.Navigator>
+  );
+}
+
+// ── Custom tab bar ────────────────────────────────────────────────────────────
+
+const TAB_ICONS = {
+  Search:  { active: 'search',  inactive: 'search-outline' },
+  Home:    { active: 'home',    inactive: 'home-outline' },
+  Profile: { active: 'person',  inactive: 'person-outline' },
+};
+
+function CustomTabBar({ state, navigation }) {
   return (
     <View style={styles.tabBar}>
-      {TABS.map(tab => {
-        const isActive = activeKey === tab.key;
+      {state.routes.map((route, index) => {
+        const isFocused = state.index === index;
+        const icons = TAB_ICONS[route.name];
         return (
           <TouchableOpacity
-            key={tab.key}
+            key={route.key}
             style={styles.tabItem}
-            onPress={() => navigation.navigate(tab.key)}
+            onPress={() => {
+              const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name);
+              }
+            }}
             activeOpacity={0.7}
           >
             <Ionicons
-              name={isActive ? tab.icon : tab.iconOutline}
+              name={isFocused ? icons.active : icons.inactive}
               size={24}
-              color={isActive ? colors.violet : '#C0C0D8'}
+              color={isFocused ? colors.violet : '#C0C0D8'}
             />
-            <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>{tab.label}</Text>
+            <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
+              {route.name}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -51,57 +99,19 @@ function BottomTabBar({ state, navigation }) {
   );
 }
 
-// ── Tab navigator built manually ──────────────────────────────────────────────
+// ── Tab navigator ─────────────────────────────────────────────────────────────
 
 function TabNavigator() {
-  const [activeTab, setActiveTab] = React.useState('Home');
-
-  const tabState = {
-    routeNames: TABS.map(t => t.key),
-    index: TABS.findIndex(t => t.key === activeTab),
-  };
-
-  const tabNav = { navigate: (key) => setActiveTab(key) };
-
   return (
-    <View style={{ flex: 1 }}>
-      <View style={{ flex: 1 }}>
-        {activeTab === 'Search' && <SearchStack />}
-        {activeTab === 'Home' && <HomeStack />}
-        {activeTab === 'Profile' && <ProfileStack />}
-      </View>
-      <BottomTabBar state={tabState} navigation={tabNav} />
-    </View>
-  );
-}
-
-function SearchStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="BooksSearch" component={BooksScreen} />
-      <Stack.Screen name="BookDetail" component={BookDetailScreen} />
-      <Stack.Screen name="AuthorBooks" component={AuthorBooksScreen} />
-    </Stack.Navigator>
-  );
-}
-
-function HomeStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="BooksHome" component={BooksScreen} />
-      <Stack.Screen name="BookDetail" component={BookDetailScreen} />
-      <Stack.Screen name="AuthorBooks" component={AuthorBooksScreen} />
-    </Stack.Navigator>
-  );
-}
-
-function ProfileStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="ProfileMain" component={ProfileScreen} />
-      <Stack.Screen name="BookDetail" component={BookDetailScreen} />
-      <Stack.Screen name="AuthorBooks" component={AuthorBooksScreen} />
-    </Stack.Navigator>
+    <Tab.Navigator
+      initialRouteName="Home"
+      tabBar={props => <CustomTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tab.Screen name="Search"  component={SearchStack} />
+      <Tab.Screen name="Home"    component={HomeStack} />
+      <Tab.Screen name="Profile" component={ProfileStack} />
+    </Tab.Navigator>
   );
 }
 
@@ -109,14 +119,14 @@ function ProfileStack() {
 
 function AuthStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Register" component={RegisterScreen} />
-    </Stack.Navigator>
+    <AuthNav.Navigator screenOptions={{ headerShown: false }}>
+      <AuthNav.Screen name="Login"    component={LoginScreen} />
+      <AuthNav.Screen name="Register" component={RegisterScreen} />
+    </AuthNav.Navigator>
   );
 }
 
-// ── Root navigator ────────────────────────────────────────────────────────────
+// ── Root ──────────────────────────────────────────────────────────────────────
 
 export function AppNavigator() {
   const { userSession } = useAuth();
@@ -145,10 +155,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
     gap: 4,
-  },
-  tabIconWrap: {
-    width: 28, height: 28, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center',
   },
   tabLabel: { fontSize: 11, color: '#C0C0D8' },
   tabLabelActive: { color: colors.violet, fontWeight: '600' },

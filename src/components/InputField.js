@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../utils/colors';
 
-export function InputField({ icon, placeholder, value, onChangeText, isSecure = false, accentColor = colors.violet }) {
+export const InputField = forwardRef(function InputField(
+  { icon, placeholder, value, onChangeText, isSecure = false, accentColor = colors.violet, returnKeyType, onSubmitEditing },
+  ref
+) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
     <View style={[styles.container, { borderColor: accentColor + '33' }]}>
       <Ionicons name={icon} size={18} color={accentColor + 'B3'} style={styles.icon} />
       <TextInput
+        ref={ref}
         style={styles.input}
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
@@ -19,6 +23,8 @@ export function InputField({ icon, placeholder, value, onChangeText, isSecure = 
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType={icon === 'mail-outline' || icon === 'mail' ? 'email-address' : 'default'}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
       />
       {isSecure && (
         <TouchableOpacity onPress={() => setShowPassword(v => !v)} style={styles.eye}>
@@ -27,7 +33,7 @@ export function InputField({ icon, placeholder, value, onChangeText, isSecure = 
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

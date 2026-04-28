@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Switch,
   StyleSheet, Dimensions, FlatList, Modal, Image,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,6 +21,7 @@ const AVATAR_KEY = 'avatar_uri';
 // ── Profile page container ────────────────────────────────────────────────────
 
 export function ProfileScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [page, setPage] = useState(1);
   const scrollRef = useRef(null);
 
@@ -36,7 +37,7 @@ export function ProfileScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Page selector */}
       <View style={styles.selector}>
         {PAGES.map((label, i) => (
@@ -58,7 +59,7 @@ export function ProfileScreen({ navigation }) {
         contentOffset={{ x: SCREEN_WIDTH, y: 0 }}
       >
         <View style={{ width: SCREEN_WIDTH }}>
-          <LibraryPage />
+          <LibraryPage navigation={navigation} />
         </View>
         <View style={{ width: SCREEN_WIDTH }}>
           <ProfilePage navigation={navigation} />
@@ -73,15 +74,61 @@ export function ProfileScreen({ navigation }) {
 
 // ── Library page ──────────────────────────────────────────────────────────────
 
-function LibraryPage() {
-  return (
-    <View style={styles.centered}>
-      <View style={styles.emptyIconBg}>
-        <Ionicons name="library" size={34} color={colors.mint + '80'} />
+function LibraryPage({ navigation }) {
+  const { libraryBooks, toggleLibrary, syncLibrary } = useAuth();
+
+  useEffect(() => { syncLibrary(); }, []);
+
+  if (libraryBooks.length === 0) {
+    return (
+      <View style={styles.centered}>
+        <View style={styles.emptyIconBg}>
+          <Ionicons name="library" size={34} color={colors.mint + '80'} />
+        </View>
+        <Text style={styles.emptyTitle}>Biblioteka je prazna</Text>
+        <Text style={styles.emptySubtitle}>Otvori neku knjigu i pritisni{'\n'}"Dodaj u biblioteku"</Text>
       </View>
-      <Text style={styles.emptyTitle}>Biblioteka je prazna</Text>
-      <Text style={styles.emptySubtitle}>Ovde će biti knjige{'\n'}koje si pročitao ili čitaš</Text>
-    </View>
+    );
+  }
+
+  return (
+    <FlatList
+      data={libraryBooks}
+      keyExtractor={item => String(item.id)}
+      contentContainerStyle={{ padding: 16, gap: 12 }}
+      showsVerticalScrollIndicator={false}
+      renderItem={({ item }) => (
+        <TouchableOpacity
+          style={styles.wishlistRow}
+          onPress={() => navigation.navigate('BookDetail', { bookId: item.id })}
+          activeOpacity={0.9}
+        >
+          <View style={styles.wishlistCover}>
+            {item.cover_url ? (
+              <ExpoImage
+                source={{ uri: item.cover_url }}
+                style={StyleSheet.absoluteFill}
+                contentFit="cover"
+                cachePolicy="disk"
+              />
+            ) : (
+              <Ionicons name="book" size={24} color={colors.muted} />
+            )}
+          </View>
+          <View style={styles.wishlistInfo}>
+            <Text style={styles.wishlistTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={styles.wishlistAuthor} numberOfLines={1}>{item.author}</Text>
+            <View style={styles.libraryBadge}>
+              <Ionicons name="checkmark-circle" size={12} color={colors.mint} />
+              <Text style={styles.libraryBadgeText}>Pročitano</Text>
+            </View>
+          </View>
+          <TouchableOpacity onPress={() => toggleLibrary(item.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="close-circle-outline" size={22} color={colors.muted} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
+    />
   );
 }
 
@@ -147,10 +194,12 @@ function WishlistPage({ navigation }) {
 // ── Profile page ──────────────────────────────────────────────────────────────
 
 function ProfilePage({ navigation }) {
-  const { userSession, profile, fetchMe, signOut } = useAuth();
+  const { userSession, profile, fetchMe, signOut, updateDisplayName, isLoading, errorMessage, clearError } = useAuth();
   const [avatarUri, setAvatarUri] = useState(null);
   const [notificationsOn, setNotificationsOn] = useState(false);
   const [showChangePwd, setShowChangePwd] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
 
   useEffect(() => {
     fetchMe();
@@ -160,9 +209,9 @@ function ProfilePage({ navigation }) {
 
   async function pickAvatar() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission needed', 'Please allow access to photos.'); return; }
+    if (status !== 'granted') { Alert.alert('Potrebna dozvola', 'Dozvoli pristup galeriji u podešavanjima uređaja.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true, aspect: [1, 1], quality: 0.6,
     });
     if (!result.canceled && result.assets[0]) {
@@ -172,7 +221,24 @@ function ProfilePage({ navigation }) {
     }
   }
 
-  const initial = userSession?.email?.[0]?.toUpperCase() ?? '?';
+  const displayName = userSession?.display_name || profile?.display_name || '';
+  const initial = displayName?.[0]?.toUpperCase() || userSession?.email?.[0]?.toUpperCase() || '?';
+
+  function startEditName() {
+    setNameInput(displayName);
+    clearError();
+    setEditingName(true);
+  }
+
+  async function saveNameEdit() {
+    const ok = await updateDisplayName(nameInput);
+    if (ok) setEditingName(false);
+  }
+
+  function cancelNameEdit() {
+    setEditingName(false);
+    clearError();
+  }
 
   const memberSince = (() => {
     const raw = profile?.created_at;
@@ -199,6 +265,37 @@ function ProfilePage({ navigation }) {
               <Ionicons name="camera" size={12} color={colors.violet} />
             </View>
           </TouchableOpacity>
+          {editingName ? (
+            <View style={styles.nameEditRow}>
+              <TextInput
+                style={styles.nameInput}
+                value={nameInput}
+                onChangeText={v => { setNameInput(v); clearError(); }}
+                autoFocus
+                maxLength={30}
+                returnKeyType="done"
+                onSubmitEditing={saveNameEdit}
+                placeholder="Ime ili nadimak"
+                placeholderTextColor={colors.muted}
+              />
+              <TouchableOpacity onPress={saveNameEdit} disabled={isLoading} style={styles.nameActionBtn}>
+                {isLoading
+                  ? <ActivityIndicator size="small" color={colors.violet} />
+                  : <Ionicons name="checkmark" size={18} color={colors.violet} />}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={cancelNameEdit} style={styles.nameActionBtn}>
+                <Ionicons name="close" size={18} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.nameRow} onPress={startEditName} activeOpacity={0.7}>
+              <Text style={styles.avatarName}>{displayName || 'Dodaj ime'}</Text>
+              <Ionicons name="pencil" size={13} color={colors.muted} style={{ marginTop: 2 }} />
+            </TouchableOpacity>
+          )}
+          {errorMessage && editingName ? (
+            <Text style={styles.nameError}>{errorMessage}</Text>
+          ) : null}
           <Text style={styles.avatarEmail}>{userSession?.email ?? ''}</Text>
           {memberSince ? <Text style={styles.avatarSince}>Član od {memberSince}</Text> : null}
         </View>
@@ -244,6 +341,18 @@ function ProfilePage({ navigation }) {
           <ProfileRow icon="star" iconColor="#F5A623" label="Oceni aplikaciju">
             <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
           </ProfileRow>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={() => navigation.navigate('PrivacyPolicy')}>
+            <ProfileRow icon="shield-checkmark" iconColor={colors.violet} label="Politika privatnosti">
+              <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
+            </ProfileRow>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={() => navigation.navigate('TermsOfService')}>
+            <ProfileRow icon="document-text" iconColor={colors.sky} label="Uslovi korišćenja">
+              <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
+            </ProfileRow>
+          </TouchableOpacity>
           <View style={styles.divider} />
           <ProfileRow icon="information-circle" iconColor={colors.muted} label="O aplikaciji">
             <Text style={styles.rowValue}>Verzija 1.0</Text>
@@ -347,8 +456,7 @@ function ChangePasswordModal({ visible, onClose }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },
   selector: {
-    flexDirection: 'row', backgroundColor: colors.white,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.cardBorder,
+    flexDirection: 'row', backgroundColor: colors.background,
   },
   selectorTab: { flex: 1, alignItems: 'center' },
   selectorLabel: { fontSize: 14, color: colors.muted, paddingVertical: 12 },
@@ -380,6 +488,8 @@ const styles = StyleSheet.create({
   wishlistTitle: { fontSize: 15, fontWeight: '600', color: colors.textDark },
   wishlistAuthor: { fontSize: 13, color: colors.muted2 },
   wishlistPrice: { fontSize: 15, fontWeight: '700', color: colors.violet },
+  libraryBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  libraryBadgeText: { fontSize: 11, fontWeight: '600', color: colors.mint },
 
   // Profile page
   profileScroll: { padding: 20, paddingTop: 20, gap: 20 },
@@ -400,7 +510,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white, justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4,
   },
-  avatarEmail: { fontSize: 16, fontWeight: '600', color: colors.textDark },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  avatarName: { fontSize: 20, fontWeight: '700', color: colors.textDark },
+  nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+  nameInput: {
+    fontSize: 18, fontWeight: '600', color: colors.textDark,
+    borderBottomWidth: 1.5, borderBottomColor: colors.violet,
+    paddingVertical: 2, paddingHorizontal: 4, minWidth: 120, textAlign: 'center',
+  },
+  nameActionBtn: { padding: 6 },
+  nameError: { fontSize: 12, color: colors.error, marginTop: 2, marginBottom: 2 },
+  avatarEmail: { fontSize: 13, color: colors.muted, marginTop: 2 },
   avatarSince: { fontSize: 13, color: colors.muted, marginTop: 2 },
 
   // Sections

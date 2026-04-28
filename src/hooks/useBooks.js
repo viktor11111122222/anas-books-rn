@@ -11,6 +11,7 @@ export function useBooks({ authorFilter } = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const pageRef = useRef(1);
+  const abortRef = useRef(null);
 
   const buildURL = useCallback((page, searchQuery, category) => {
     const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
@@ -37,9 +38,16 @@ export function useBooks({ authorFilter } = {}) {
   }, []);
 
   const load = useCallback(async (page, searchQuery, category, isRefresh = false) => {
+    // Cancel any in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setIsLoading(true);
     try {
-      const res = await fetch(buildURL(page, searchQuery, category));
+      const res = await fetch(buildURL(page, searchQuery, category), {
+        signal: controller.signal,
+      });
       const json = await res.json();
       const newBooks = json.books ?? [];
       if (isRefresh || page === 1) {
@@ -47,8 +55,10 @@ export function useBooks({ authorFilter } = {}) {
       } else {
         setBooks(prev => [...prev, ...newBooks]);
       }
-      setHasMore((isRefresh ? newBooks.length : 0) < json.total || page > 1);
-    } catch {}
+      setHasMore(newBooks.length === LIMIT);
+    } catch (e) {
+      if (e.name === 'AbortError') return; // cancelled — don't update state
+    }
     setIsLoading(false);
   }, [buildURL]);
 
