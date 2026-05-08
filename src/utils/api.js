@@ -1,10 +1,11 @@
 import { Platform } from 'react-native';
 
-// iOS Simulator → localhost works. Physical device → use Mac's IP (ipconfig getifaddr en0)
+// Android emulator → 10.0.2.2 maps to host. iOS simulator + physical device → Mac's LAN IP.
+// If the network changes, run: ipconfig getifaddr en0
 export const BASE_URL =
   Platform.OS === 'android'
     ? 'http://10.0.2.2:3000/api'
-    : 'http://localhost:3000/api';
+    : 'http://172.20.10.2:3000/api';
 
 export async function apiRequest(path, options = {}, token = null) {
   const headers = { 'Content-Type': 'application/json' };

@@ -2,23 +2,25 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { View, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { apiRequest } from '../utils/api';
+import { apiRequest, BASE_URL } from '../utils/api';
 
-const TOKEN_KEY        = 'auth_token';
-const USER_KEY         = 'auth_user';
-const WISHLIST_IDS_KEY = 'wishlist_ids';
-const WISHLIST_BOOKS_KEY = 'wishlist_books';
-const LIBRARY_IDS_KEY  = 'library_ids';
-const LIBRARY_BOOKS_KEY = 'library_books';
+const TOKEN_KEY            = 'auth_token';
+const USER_KEY             = 'auth_user';
+const WISHLIST_IDS_KEY     = 'wishlist_ids';
+const WISHLIST_BOOKS_KEY   = 'wishlist_books';
+const WISHLIST_FOLDERS_KEY = 'wishlist_folders';
+const LIBRARY_IDS_KEY      = 'library_ids';
+const LIBRARY_BOOKS_KEY    = 'library_books';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [userSession,       setUserSession]       = useState(null);
   const [profile,           setProfile]           = useState(null);
-  const [wishlistIds,       setWishlistIdsState]  = useState(new Set());
-  const [wishlistBooks,     setWishlistBooksState] = useState([]);
-  const [libraryIds,        setLibraryIdsState]   = useState(new Set());
+  const [wishlistIds,       setWishlistIdsState]    = useState(new Set());
+  const [wishlistBooks,     setWishlistBooksState]  = useState([]);
+  const [wishlistFolders,   setWishlistFoldersState] = useState([]);
+  const [libraryIds,        setLibraryIdsState]     = useState(new Set());
   const [libraryBooks,      setLibraryBooksState] = useState([]);
   const [isLoading,         setIsLoading]         = useState(false);
   const [errorMessage,      setErrorMessage]      = useState(null);
@@ -37,6 +39,11 @@ export function AuthProvider({ children }) {
     AsyncStorage.setItem(WISHLIST_BOOKS_KEY, JSON.stringify(books));
   }, []);
 
+  const setWishlistFolders = useCallback((folders) => {
+    setWishlistFoldersState(folders);
+    AsyncStorage.setItem(WISHLIST_FOLDERS_KEY, JSON.stringify(folders));
+  }, []);
+
   const setLibraryIds = useCallback((ids) => {
     setLibraryIdsState(ids);
     AsyncStorage.setItem(LIBRARY_IDS_KEY, JSON.stringify([...ids]));
@@ -53,12 +60,14 @@ export function AuthProvider({ children }) {
 
   async function syncAllFromServer(token) {
     try {
-      const [wishlistData, libraryData] = await Promise.all([
+      const [wishlistData, libraryData, foldersData] = await Promise.all([
         apiRequest('/wishlist', {}, token),
         apiRequest('/library',  {}, token),
+        apiRequest('/wishlist/folders', {}, token),
       ]);
       setWishlistIds(new Set(wishlistData.map(b => b.id)));
       setWishlistBooks(wishlistData);
+      setWishlistFolders(foldersData);
       setLibraryIds(new Set(libraryData.map(b => b.id)));
       setLibraryBooks(libraryData);
     } catch {}
@@ -69,11 +78,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const [token, userRaw, idsRaw, booksRaw, libIdsRaw, libBooksRaw] = await Promise.all([
+        const [token, userRaw, idsRaw, booksRaw, foldersRaw, libIdsRaw, libBooksRaw] = await Promise.all([
           SecureStore.getItemAsync(TOKEN_KEY),
           SecureStore.getItemAsync(USER_KEY),
           AsyncStorage.getItem(WISHLIST_IDS_KEY),
           AsyncStorage.getItem(WISHLIST_BOOKS_KEY),
+          AsyncStorage.getItem(WISHLIST_FOLDERS_KEY),
           AsyncStorage.getItem(LIBRARY_IDS_KEY),
           AsyncStorage.getItem(LIBRARY_BOOKS_KEY),
         ]);
@@ -86,6 +96,7 @@ export function AuthProvider({ children }) {
             // Restore cached local data immediately
             if (idsRaw)      setWishlistIdsState(new Set(JSON.parse(idsRaw)));
             if (booksRaw)    setWishlistBooksState(JSON.parse(booksRaw));
+            if (foldersRaw)  setWishlistFoldersState(JSON.parse(foldersRaw));
             if (libIdsRaw)   setLibraryIdsState(new Set(JSON.parse(libIdsRaw)));
             if (libBooksRaw) setLibraryBooksState(JSON.parse(libBooksRaw));
             // Sync fresh data from server in background
@@ -190,13 +201,14 @@ export function AuthProvider({ children }) {
     await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
     await SecureStore.deleteItemAsync(USER_KEY).catch(() => {});
     await AsyncStorage.multiRemove([
-      WISHLIST_IDS_KEY, WISHLIST_BOOKS_KEY,
+      WISHLIST_IDS_KEY, WISHLIST_BOOKS_KEY, WISHLIST_FOLDERS_KEY,
       LIBRARY_IDS_KEY,  LIBRARY_BOOKS_KEY,
     ]);
     setUserSession(null);
     setProfile(null);
     setWishlistIdsState(new Set());
     setWishlistBooksState([]);
+    setWishlistFoldersState([]);
     setLibraryIdsState(new Set());
     setLibraryBooksState([]);
   }
@@ -224,7 +236,49 @@ export function AuthProvider({ children }) {
       const token = await getToken();
       const p = await apiRequest('/auth/me', {}, token);
       setProfile(p);
+      const fileBase = BASE_URL.replace('/api', '');
+      const rawAvatar = p.avatar_url ?? null;
+      const resolvedAvatar = rawAvatar
+        ? (rawAvatar.startsWith('http') ? rawAvatar : `${fileBase}${rawAvatar}`)
+        : null;
+      const updatedSession = {
+        ...userSession,
+        profile_public:  p.profile_public  ?? 1,
+        library_public:  p.library_public  ?? 1,
+        wishlist_public: p.wishlist_public ?? 1,
+        avatar_url:      resolvedAvatar,
+      };
+      setUserSession(updatedSession);
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedSession));
     } catch {}
+  }
+
+  async function uploadAvatar(localUri) {
+    if (!userSession) return null;
+    try {
+      const token = await getToken();
+      const fileServerBase = BASE_URL.replace('/api', '');
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri: localUri,
+        type: 'image/jpeg',
+        name: 'avatar.jpg',
+      });
+      const res = await fetch(`${BASE_URL}/auth/avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.avatar_url) return null;
+      const fullUrl = `${fileServerBase}${data.avatar_url}?t=${Date.now()}`;
+      const updatedSession = { ...userSession, avatar_url: fullUrl };
+      setUserSession(updatedSession);
+      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updatedSession));
+      return fullUrl;
+    } catch {
+      return null;
+    }
   }
 
   async function changePassword(current, newPwd, confirm) {
@@ -248,7 +302,7 @@ export function AuthProvider({ children }) {
 
   // ── Wishlist ──────────────────────────────────────────────────────────────────
 
-  async function toggleWishlist(bookId, { title, author, coverUrl, minPrice, storeCount } = {}) {
+  async function toggleWishlist(bookId, { title, author, coverUrl, minPrice, storeCount, folderId = null } = {}) {
     if (!userSession) return;
     const wasIn = wishlistIds.has(bookId);
     const newIds = new Set(wishlistIds);
@@ -259,7 +313,7 @@ export function AuthProvider({ children }) {
     } else {
       newIds.add(bookId);
       if (title && author) {
-        newBooks = [{ id: bookId, title, author, cover_url: coverUrl, min_price: minPrice, store_count: storeCount, added_at: null }, ...newBooks];
+        newBooks = [{ id: bookId, title, author, cover_url: coverUrl, min_price: minPrice, store_count: storeCount, added_at: null, folder_id: folderId }, ...newBooks];
       }
     }
     setWishlistIds(newIds);
@@ -269,7 +323,7 @@ export function AuthProvider({ children }) {
       if (wasIn) {
         await apiRequest(`/wishlist/${bookId}`, { method: 'DELETE' }, token);
       } else {
-        await apiRequest(`/wishlist/${bookId}`, { method: 'POST', body: JSON.stringify({}) }, token);
+        await apiRequest(`/wishlist/${bookId}`, { method: 'POST', body: JSON.stringify({ folderId }) }, token);
       }
     } catch {}
   }
@@ -278,10 +332,133 @@ export function AuthProvider({ children }) {
     if (!userSession) return;
     try {
       const token = await getToken();
-      const serverBooks = await apiRequest('/wishlist', {}, token);
+      const [serverBooks, serverFolders] = await Promise.all([
+        apiRequest('/wishlist', {}, token),
+        apiRequest('/wishlist/folders', {}, token),
+      ]);
       setWishlistIds(new Set(serverBooks.map(b => b.id)));
       setWishlistBooks(serverBooks);
+      setWishlistFolders(serverFolders);
     } catch {}
+  }
+
+  async function createWishlistFolder(name) {
+    if (!userSession) return null;
+    try {
+      const token = await getToken();
+      const folder = await apiRequest('/wishlist/folders', { method: 'POST', body: JSON.stringify({ name }) }, token);
+      setWishlistFoldersState(prev => {
+        const updated = [...prev, folder];
+        AsyncStorage.setItem(WISHLIST_FOLDERS_KEY, JSON.stringify(updated));
+        return updated;
+      });
+      return folder;
+    } catch { return null; }
+  }
+
+  async function renameWishlistFolder(id, name) {
+    if (!userSession) return;
+    setWishlistFoldersState(prev => {
+      const updated = prev.map(f => f.id === id ? { ...f, name } : f);
+      AsyncStorage.setItem(WISHLIST_FOLDERS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      const token = await getToken();
+      await apiRequest(`/wishlist/folders/${id}`, { method: 'PUT', body: JSON.stringify({ name }) }, token);
+    } catch { syncWishlist(); }
+  }
+
+  async function deleteWishlistFolder(id) {
+    if (!userSession) return;
+    setWishlistFoldersState(prev => {
+      const updated = prev.filter(f => f.id !== id);
+      AsyncStorage.setItem(WISHLIST_FOLDERS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    setWishlistBooksState(prev => {
+      const updated = prev.map(b => b.folder_id === id ? { ...b, folder_id: null } : b);
+      AsyncStorage.setItem(WISHLIST_BOOKS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      const token = await getToken();
+      await apiRequest(`/wishlist/folders/${id}`, { method: 'DELETE' }, token);
+    } catch { syncWishlist(); }
+  }
+
+  async function moveBookToFolder(bookId, folderId) {
+    if (!userSession) return;
+    setWishlistBooksState(prev => {
+      const updated = prev.map(b => b.id === bookId ? { ...b, folder_id: folderId } : b);
+      AsyncStorage.setItem(WISHLIST_BOOKS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      const token = await getToken();
+      await apiRequest(`/wishlist/${bookId}`, { method: 'PATCH', body: JSON.stringify({ folderId }) }, token);
+    } catch { syncWishlist(); }
+  }
+
+  async function setBookPrivacy(bookId, isPrivate) {
+    if (!userSession) return;
+    setWishlistBooksState(prev => {
+      const updated = prev.map(b => b.id === bookId ? { ...b, is_private: isPrivate ? 1 : 0 } : b);
+      AsyncStorage.setItem(WISHLIST_BOOKS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      const token = await getToken();
+      await apiRequest(`/wishlist/${bookId}/privacy`, { method: 'PATCH', body: JSON.stringify({ isPrivate }) }, token);
+    } catch { syncWishlist(); }
+  }
+
+  async function setFolderPrivacy(folderId, isPrivate) {
+    if (!userSession) return;
+    setWishlistFoldersState(prev => {
+      const updated = prev.map(f => f.id === folderId ? { ...f, is_private: isPrivate ? 1 : 0 } : f);
+      AsyncStorage.setItem(WISHLIST_FOLDERS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      const token = await getToken();
+      await apiRequest(`/wishlist/folders/${folderId}/privacy`, { method: 'PATCH', body: JSON.stringify({ isPrivate }) }, token);
+    } catch { syncWishlist(); }
+  }
+
+  async function setLibraryBookPrivacy(bookId, isPrivate) {
+    if (!userSession) return;
+    setLibraryBooksState(prev => {
+      const updated = prev.map(b => b.id === bookId ? { ...b, is_private: isPrivate ? 1 : 0 } : b);
+      AsyncStorage.setItem(LIBRARY_BOOKS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    try {
+      const token = await getToken();
+      await apiRequest(`/library/${bookId}/privacy`, { method: 'PATCH', body: JSON.stringify({ isPrivate }) }, token);
+    } catch { syncLibrary(); }
+  }
+
+  async function updatePrivacySettings({ profilePublic, libraryPublic, wishlistPublic }) {
+    if (!userSession) return;
+    const patch = {};
+    if (profilePublic  !== undefined) patch.profilePublic  = profilePublic;
+    if (libraryPublic  !== undefined) patch.libraryPublic  = libraryPublic;
+    if (wishlistPublic !== undefined) patch.wishlistPublic = wishlistPublic;
+
+    // Optimistic update on session
+    const updates = {};
+    if (profilePublic  !== undefined) updates.profile_public  = profilePublic  ? 1 : 0;
+    if (libraryPublic  !== undefined) updates.library_public  = libraryPublic  ? 1 : 0;
+    if (wishlistPublic !== undefined) updates.wishlist_public = wishlistPublic ? 1 : 0;
+    const updated = { ...userSession, ...updates };
+    setUserSession(updated);
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(updated));
+
+    try {
+      const token = await getToken();
+      await apiRequest('/auth/profile', { method: 'PATCH', body: JSON.stringify(patch) }, token);
+    } catch { fetchMe(); }
   }
 
   // ── Library ───────────────────────────────────────────────────────────────────
@@ -336,12 +513,14 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       userSession, profile,
-      wishlistIds, wishlistBooks,
+      wishlistIds, wishlistBooks, wishlistFolders,
       libraryIds, libraryBooks,
       isLoading, errorMessage, resetEmailSent,
       signIn, signUp, signOut, resetPassword,
-      fetchMe, changePassword, updateDisplayName,
+      fetchMe, changePassword, updateDisplayName, uploadAvatar,
       toggleWishlist, syncWishlist,
+      createWishlistFolder, renameWishlistFolder, deleteWishlistFolder, moveBookToFolder,
+      setBookPrivacy, setFolderPrivacy, setLibraryBookPrivacy, updatePrivacySettings,
       toggleLibrary, syncLibrary,
       clearError, setResetEmailSent,
     }}>

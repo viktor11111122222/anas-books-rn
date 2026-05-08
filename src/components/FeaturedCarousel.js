@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../utils/colors';
@@ -26,36 +26,34 @@ export function FeaturedCarousel({ books, onBookPress }) {
     timerRef.current = setInterval(() => {
       setCurrentIndex(prev => {
         const next = (prev + 1) % books.length;
-        flatListRef.current?.scrollToIndex({ index: next, animated: true });
+        flatListRef.current?.scrollTo({ x: next * SCREEN_WIDTH, animated: true });
         return next;
       });
     }, 3500);
     return () => clearInterval(timerRef.current);
   }, [books.length]);
 
-  const onViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems.length > 0) {
-      setCurrentIndex(viewableItems[0].index ?? 0);
-    }
-  });
+  function onScrollEnd(e) {
+    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    setCurrentIndex(index);
+  }
 
   if (!books.length) return null;
 
   return (
     <View>
-      <FlatList
+      <ScrollView
         ref={flatListRef}
-        data={books}
-        keyExtractor={(_, i) => String(i)}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        snapToAlignment="center"
         decelerationRate="fast"
-        onViewableItemsChanged={onViewableItemsChanged.current}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-        renderItem={({ item }) => (
+        onMomentumScrollEnd={onScrollEnd}
+        onScrollEndDrag={onScrollEnd}
+      >
+        {books.map((item, i) => (
           <TouchableOpacity
+            key={i}
             style={styles.slide}
             onPress={() => onBookPress(item)}
             activeOpacity={0.95}
@@ -75,7 +73,6 @@ export function FeaturedCarousel({ books, onBookPress }) {
                   <Ionicons name="book" size={48} color={colors.muted} />
                 </View>
               )}
-              {/* Text band */}
               <View style={styles.band}>
                 <Text style={styles.bandTitle} numberOfLines={2}>{cleanTitle(item.title)}</Text>
                 <View style={styles.bandRow}>
@@ -85,8 +82,8 @@ export function FeaturedCarousel({ books, onBookPress }) {
               </View>
             </View>
           </TouchableOpacity>
-        )}
-      />
+        ))}
+      </ScrollView>
 
       {/* Dots */}
       <View style={styles.dots}>

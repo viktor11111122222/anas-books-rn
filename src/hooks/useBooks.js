@@ -80,11 +80,27 @@ export function useBooks({ authorFilter } = {}) {
     return res.json();
   }, []);
 
+  const fetchSimilar = useCallback(async (id) => {
+    try {
+      const res = await fetch(`${BASE_URL}/books/${id}/similar`);
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
+  }, []);
+
+  const fetchByAuthor = useCallback(async (id) => {
+    try {
+      const res = await fetch(`${BASE_URL}/books/${id}/by-author`);
+      if (!res.ok) return [];
+      return res.json();
+    } catch { return []; }
+  }, []);
+
   return {
     books, featuredBooks, categories,
     selectedCategory, setSelectedCategory,
     isLoading, hasMore,
     loadCategories, loadFeatured,
-    refresh, loadMore, fetchDetail,
+    refresh, loadMore, fetchDetail, fetchSimilar, fetchByAuthor,
   };
 }

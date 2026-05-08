@@ -75,6 +75,7 @@ const sectionTitle = selectedCategory
     : 'Sve knjige';
 
   const filteredFeatured = featuredBooks.filter(b => !libraryIds.has(b.id));
+  const filteredBooks    = books.filter(b => !libraryIds.has(b.id));
   const showFeatured = filteredFeatured.length > 0 && !selectedCategory;
 
   const renderHeader = () => (
@@ -149,7 +150,7 @@ const sectionTitle = selectedCategory
         </View>
       ) : (
         <FlatList
-          data={books}
+          data={filteredBooks}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
           numColumns={2}

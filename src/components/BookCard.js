@@ -1,5 +1,15 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+
+const STORE_LABELS = {
+  kreativni_centar: 'Kreativni C.',
+  data_status:      'Data Status',
+  laguna:           'Laguna',
+  vulkan:           'Vulkan',
+  publik_praktikum: 'Pub. Praktikum',
+  delfi:            'Delfi',
+  dexy:             'Dexy',
+};
 import Animated, {
   useSharedValue, useAnimatedStyle,
   withSpring, withSequence, withTiming, withDelay,
@@ -135,10 +145,10 @@ export const BookCard = React.memo(function BookCard({ book, onPress }) {
         <Text style={styles.title} numberOfLines={2}>{book.title}</Text>
         <Text style={styles.author} numberOfLines={1}>{book.author}</Text>
         <View style={styles.priceRow}>
-          <Text style={styles.price}>from {book.min_price} RSD</Text>
-          {book.store_count > 1 && (
+          <Text style={styles.price}>{book.min_price} RSD</Text>
+          {book.cheapest_store && (
             <View style={styles.storeBadge}>
-              <Text style={styles.storeCount}>{book.store_count} stores</Text>
+              <Text style={styles.storeCount}>{STORE_LABELS[book.cheapest_store] ?? book.cheapest_store}</Text>
             </View>
           )}
         </View>

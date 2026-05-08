@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../utils/colors';
@@ -17,11 +18,26 @@ import { AuthorBooksScreen } from '../screens/AuthorBooksScreen';
 import { ProfileScreen }         from '../screens/ProfileScreen';
 import { PrivacyPolicyScreen }  from '../screens/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from '../screens/TermsOfServiceScreen';
+import { UserProfileScreen }    from '../screens/UserProfileScreen';
+import { InviteScreen }         from '../screens/InviteScreen';
+
+const linking = {
+  prefixes: [Linking.createURL('/'), 'anasbooks://'],
+  config: {
+    screens: {
+      Tabs: {
+        screens: {},
+      },
+      Invite: 'invite/:token',
+    },
+  },
+};
 
 const SearchNav  = createNativeStackNavigator();
 const HomeNav    = createNativeStackNavigator();
 const ProfileNav = createNativeStackNavigator();
 const AuthNav    = createNativeStackNavigator();
+const RootNav    = createNativeStackNavigator();
 const Tab        = createBottomTabNavigator();
 
 // ── Individual stacks ─────────────────────────────────────────────────────────
@@ -29,9 +45,10 @@ const Tab        = createBottomTabNavigator();
 function SearchStack() {
   return (
     <SearchNav.Navigator screenOptions={{ headerShown: false }}>
-      <SearchNav.Screen name="SearchMain"  component={SearchScreen} />
-      <SearchNav.Screen name="BookDetail"  component={BookDetailScreen} />
-      <SearchNav.Screen name="AuthorBooks" component={AuthorBooksScreen} />
+      <SearchNav.Screen name="SearchMain"   component={SearchScreen} />
+      <SearchNav.Screen name="BookDetail"   component={BookDetailScreen} />
+      <SearchNav.Screen name="AuthorBooks"  component={AuthorBooksScreen} />
+      <SearchNav.Screen name="UserProfile"  component={UserProfileScreen} />
     </SearchNav.Navigator>
   );
 }
@@ -54,6 +71,7 @@ function ProfileStack() {
       <ProfileNav.Screen name="AuthorBooks"    component={AuthorBooksScreen} />
       <ProfileNav.Screen name="PrivacyPolicy"  component={PrivacyPolicyScreen} />
       <ProfileNav.Screen name="TermsOfService" component={TermsOfServiceScreen} />
+      <ProfileNav.Screen name="UserProfile"    component={UserProfileScreen} />
     </ProfileNav.Navigator>
   );
 }
@@ -126,13 +144,25 @@ function AuthStack() {
   );
 }
 
-// ── Root ──────────────────────────────────────────────────────────────────────
+// ── Root (tabs + invite modal) ────────────────────────────────────────────────
+
+function RootNavigator() {
+  return (
+    <RootNav.Navigator screenOptions={{ headerShown: false }}>
+      <RootNav.Screen name="Tabs"   component={TabNavigator} />
+      <RootNav.Screen name="Invite" component={InviteScreen}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+    </RootNav.Navigator>
+  );
+}
+
+// ── App navigator ─────────────────────────────────────────────────────────────
 
 export function AppNavigator() {
   const { userSession } = useAuth();
   return (
-    <NavigationContainer>
-      {userSession ? <TabNavigator /> : <AuthStack />}
+    <NavigationContainer linking={userSession ? linking : undefined}>
+      {userSession ? <RootNavigator /> : <AuthStack />}
     </NavigationContainer>
   );
 }

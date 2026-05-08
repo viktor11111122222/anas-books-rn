@@ -2,6 +2,7 @@
   "expo": {
     "name": "anas-books-rn",
     "slug": "anas-books-rn",
+    "scheme": "anasbooks",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

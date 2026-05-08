@@ -1,12 +1,9 @@
-import React, { useState, forwardRef } from 'react';
+import React, { useState } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../utils/colors';
 
-export const InputField = forwardRef(function InputField(
-  { icon, placeholder, value, onChangeText, isSecure = false, accentColor = colors.violet, returnKeyType, onSubmitEditing },
-  ref
-) {
+export function InputField({ icon, placeholder, value, onChangeText, isSecure = false, accentColor = colors.violet, returnKeyType, onSubmitEditing, ref }) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -33,7 +30,7 @@ export const InputField = forwardRef(function InputField(
       )}
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   container: {
