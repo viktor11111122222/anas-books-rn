@@ -2,8 +2,10 @@ import React, { useState, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ScrollView, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Keyboard,
+  ActivityIndicator, Keyboard, Image,
 } from 'react-native';
+
+const LOGO = require('../../assets/logo.png');
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -49,9 +51,7 @@ export function RegisterScreen({ navigation }) {
 
         {/* Logo */}
         <View style={styles.logoSection}>
-          <LinearGradient colors={[colors.mint, colors.sky]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logoBg}>
-            <Ionicons name="person-add" size={32} color={colors.white} />
-          </LinearGradient>
+          <Image source={LOGO} style={styles.logoImg} resizeMode="contain" />
           <Text style={styles.appName}>Napravi nalog</Text>
           <Text style={styles.tagline}>Pridruži se AnasBooks zajednici</Text>
         </View>
@@ -141,13 +141,8 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#F4F4FB', justifyContent: 'center', alignItems: 'center',
   },
-  logoSection: { alignItems: 'center', paddingTop: 20, paddingBottom: 40 },
-  logoBg: {
-    width: 80, height: 80, borderRadius: 40,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 14,
-    shadowColor: colors.mint, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10,
-  },
+  logoSection: { alignItems: 'center', paddingTop: 20, paddingBottom: 36 },
+  logoImg: { width: 200, height: 113, marginBottom: 10 },
   appName: { fontSize: 30, fontWeight: '700', color: colors.textDark, marginBottom: 4 },
   tagline: { fontSize: 14, fontWeight: '500', color: colors.muted },
   form: { paddingHorizontal: 28 },

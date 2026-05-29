@@ -8,6 +8,10 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_MARGIN = 16;
 const CARD_WIDTH = SCREEN_WIDTH - CARD_MARGIN * 2;
 
+const PEEK_CARD_WIDTH = SCREEN_WIDTH * 0.78;
+const PEEK_GAP = 12;
+const PEEK_SIDE_PADDING = (SCREEN_WIDTH - PEEK_CARD_WIDTH) / 2;
+
 const BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
 
 function cleanTitle(title) {
@@ -16,6 +20,7 @@ function cleanTitle(title) {
   return t.split(' - ')[0];
 }
 
+// Full-width auto-scrolling carousel (Najpopularnije)
 export function FeaturedCarousel({ books, onBookPress }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
@@ -85,7 +90,6 @@ export function FeaturedCarousel({ books, onBookPress }) {
         ))}
       </ScrollView>
 
-      {/* Dots */}
       <View style={styles.dots}>
         {books.map((_, i) => (
           <View
@@ -94,6 +98,95 @@ export function FeaturedCarousel({ books, onBookPress }) {
               styles.dot,
               i === currentIndex ? styles.dotActive : styles.dotInactive,
             ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Peek carousel — infinite loop, user swipes manually, adjacent cards peek on both sides
+export function PeekCarousel({ books, onBookPress }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const scrollRef = useRef(null);
+  const n = books.length;
+  const STEP = PEEK_CARD_WIDTH + PEEK_GAP;
+
+  if (n === 0) return null;
+
+  // Wrap: [last, ...books, first] so both edges loop
+  const looped = n > 1 ? [books[n - 1], ...books, books[0]] : books;
+
+  function onScrollEnd(e) {
+    const x = e.nativeEvent.contentOffset.x;
+    const raw = Math.round(x / STEP);
+    if (n === 1) return;
+    if (raw === 0) {
+      // hit clone of last → jump to real last
+      scrollRef.current?.scrollTo({ x: n * STEP, animated: false });
+      setCurrentIndex(n - 1);
+    } else if (raw === n + 1) {
+      // hit clone of first → jump to real first
+      scrollRef.current?.scrollTo({ x: STEP, animated: false });
+      setCurrentIndex(0);
+    } else {
+      setCurrentIndex(raw - 1);
+    }
+  }
+
+  return (
+    <View>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        snapToInterval={STEP}
+        disableIntervalMomentum
+        contentOffset={{ x: n > 1 ? STEP : 0, y: 0 }}
+        contentContainerStyle={{ paddingHorizontal: PEEK_SIDE_PADDING }}
+        onMomentumScrollEnd={onScrollEnd}
+        onScrollEndDrag={onScrollEnd}
+      >
+        {looped.map((item, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[styles.peekSlide, i < looped.length - 1 && { marginRight: PEEK_GAP }]}
+            onPress={() => onBookPress(item)}
+            activeOpacity={0.95}
+          >
+            <View style={styles.peekCard}>
+              <View style={styles.peekImageWrap}>
+                {item.cover_url ? (
+                  <Image
+                    source={{ uri: item.cover_url }}
+                    style={styles.peekImage}
+                    contentFit="contain"
+                    placeholder={BLURHASH}
+                    transition={200}
+                    cachePolicy="disk"
+                  />
+                ) : (
+                  <View style={styles.peekImagePlaceholder}>
+                    <Ionicons name="book" size={36} color={colors.muted} />
+                  </View>
+                )}
+              </View>
+              <View style={styles.peekInfo}>
+                <Text style={styles.peekTitle} numberOfLines={2}>{cleanTitle(item.title)}</Text>
+                <Text style={styles.peekAuthor} numberOfLines={1}>{item.author}</Text>
+                <Text style={styles.peekPrice}>od {item.min_price} RSD</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <View style={styles.dots}>
+        {books.map((_, i) => (
+          <View
+            key={i}
+            style={[styles.dot, i === currentIndex ? styles.dotActive : styles.dotInactive]}
           />
         ))}
       </View>
@@ -155,6 +248,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+
+  // Peek carousel
+  peekSlide: {
+    width: PEEK_CARD_WIDTH,
+  },
+  peekCard: {
+    flexDirection: 'row',
+    height: 150,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: colors.white,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  peekImageWrap: {
+    width: 100,
+    backgroundColor: '#F0EFF8',
+  },
+  peekImage: {
+    width: 100,
+    height: 150,
+  },
+  peekImagePlaceholder: {
+    width: 100,
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#E0E0F0',
+  },
+  peekInfo: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'center',
+    gap: 4,
+  },
+  peekTitle: {
+    color: colors.textDark,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  peekAuthor: {
+    color: colors.muted,
+    fontSize: 11,
+  },
+  peekPrice: {
+    color: colors.violet,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+
   dots: {
     flexDirection: 'row',
     justifyContent: 'center',

@@ -545,6 +545,16 @@ function ProfilePage({ navigation }) {
   const [showChangePwd, setShowChangePwd] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const [showReviews, setShowReviews] = useState(false);
+  const [myReviews, setMyReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  const [showRecent, setShowRecent] = useState(false);
+  const [recentBooks, setRecentBooks] = useState([]);
+
+  const [showStats, setShowStats] = useState(false);
+  const [statsData, setStatsData] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const [myToken, setMyToken] = useState(null);
   const [friends, setFriends] = useState([]);
@@ -552,6 +562,52 @@ function ProfilePage({ navigation }) {
   const [friendsLoading, setFriendsLoading] = useState(false);
 
   const { BASE_URL } = require('../utils/api');
+
+  const loadMyReviews = useCallback(async () => {
+    if (!userSession?.id) return;
+    setReviewsLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/users/${userSession.id}/reviews`);
+      const data = await res.json();
+      setMyReviews(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('loadMyReviews error:', e);
+    }
+    setReviewsLoading(false);
+  }, [userSession?.id]);
+
+  const loadRecentBooks = useCallback(async () => {
+    try {
+      const val = await AsyncStorage.getItem('recently_viewed');
+      setRecentBooks(val ? JSON.parse(val) : []);
+    } catch {}
+  }, []);
+
+  const loadStats = useCallback(async () => {
+    if (!userSession?.id) return;
+    setStatsLoading(true);
+    try {
+      const [profileRes, reviewsRes] = await Promise.all([
+        fetch(`${BASE_URL}/users/${userSession.id}`),
+        fetch(`${BASE_URL}/users/${userSession.id}/reviews`),
+      ]);
+      const profileData = await profileRes.json();
+      const reviewsData = await reviewsRes.json();
+      const reviews = Array.isArray(reviewsData) ? reviewsData : [];
+      const avgRating = reviews.length
+        ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
+        : null;
+      setStatsData({
+        library_count:  profileData.library_count  ?? 0,
+        wishlist_count: profileData.wishlist_count ?? 0,
+        review_count:   profileData.review_count   ?? 0,
+        avg_rating:     avgRating,
+      });
+    } catch (e) {
+      console.error('loadStats error:', e);
+    }
+    setStatsLoading(false);
+  }, [userSession?.id]);
 
   const loadFriendsData = useCallback(async () => {
     if (!userSession) return;
@@ -619,8 +675,8 @@ function ProfilePage({ navigation }) {
 
   useEffect(() => {
     fetchMe();
-    AsyncStorage.getItem('pref_notifications').then(v => setNotificationsOn(v === 'true'));
     loadFriendsData();
+    AsyncStorage.getItem('pref_notifications').then(v => setNotificationsOn(v === 'true'));
   }, []);
 
   async function pickAvatar() {
@@ -739,9 +795,19 @@ function ProfilePage({ navigation }) {
             <Text style={styles.rowLabel}>Notifikacije</Text>
             <Switch
               value={notificationsOn}
-              onValueChange={v => {
+              onValueChange={(v) => {
                 setNotificationsOn(v);
                 AsyncStorage.setItem('pref_notifications', String(v));
+                if (!v) {
+                  Alert.alert(
+                    'Isključi notifikacije',
+                    'Da potpuno isključiš notifikacije, idi u Podešavanja → Anas Books.',
+                    [
+                      { text: 'Otkaži', style: 'cancel' },
+                      { text: 'Otvori podešavanja', onPress: () => Linking.openSettings() },
+                    ]
+                  );
+                }
               }}
               trackColor={{ false: '#D0D0D8', true: colors.mint }}
               thumbColor={colors.white}
@@ -887,6 +953,39 @@ function ProfilePage({ navigation }) {
           </View>
         </ProfileSection>
 
+        {/* Activity */}
+        <ProfileSection title="AKTIVNOST">
+          <TouchableOpacity onPress={() => { setShowReviews(true); loadMyReviews(); }} activeOpacity={0.75}>
+            <ProfileRow icon="star" iconColor={colors.gold} label="Moje recenzije">
+              <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
+            </ProfileRow>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={() => { setShowRecent(true); loadRecentBooks(); }} activeOpacity={0.75}>
+            <ProfileRow icon="time" iconColor={colors.sky} label="Nedavno pregledano">
+              <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
+            </ProfileRow>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={() => { setShowStats(true); loadStats(); }} activeOpacity={0.75}>
+            <ProfileRow icon="bar-chart" iconColor={colors.mint} label="Statistike čitanja">
+              <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
+            </ProfileRow>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={() => navigation.navigate('Exchange')} activeOpacity={0.75}>
+            <ProfileRow icon="swap-horizontal" iconColor="#7C5CBF" label="Razmena knjiga">
+              <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
+            </ProfileRow>
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity onPress={() => navigation.navigate('Notifications')} activeOpacity={0.75}>
+            <ProfileRow icon="notifications" iconColor={colors.sky} label="Obaveštenja">
+              <Ionicons name="chevron-forward" size={14} color="#C8C8DC" />
+            </ProfileRow>
+          </TouchableOpacity>
+        </ProfileSection>
+
         {/* Info section */}
         <ProfileSection title="INFORMACIJE">
           <ProfileRow icon="star" iconColor="#F5A623" label="Oceni aplikaciju">
@@ -920,6 +1019,25 @@ function ProfilePage({ navigation }) {
       </ScrollView>
 
       <ChangePasswordModal visible={showChangePwd} onClose={() => setShowChangePwd(false)} />
+      <MyReviewsModal
+        visible={showReviews}
+        onClose={() => setShowReviews(false)}
+        reviews={myReviews}
+        loading={reviewsLoading}
+        onBookPress={id => { setShowReviews(false); navigation.navigate('BookDetail', { bookId: id }); }}
+      />
+      <RecentlyViewedModal
+        visible={showRecent}
+        onClose={() => setShowRecent(false)}
+        books={recentBooks}
+        onBookPress={id => { setShowRecent(false); navigation.navigate('BookDetail', { bookId: id }); }}
+      />
+      <StatsModal
+        visible={showStats}
+        onClose={() => setShowStats(false)}
+        data={statsData}
+        loading={statsLoading}
+      />
     </>
   );
 }
@@ -967,6 +1085,149 @@ function ProfileRow({ icon, iconColor, label, children }) {
       <Text style={styles.rowLabel}>{label}</Text>
       {children}
     </View>
+  );
+}
+
+// ── My Reviews Modal ──────────────────────────────────────────────────────────
+
+function MyReviewsModal({ visible, onClose, reviews, loading, onBookPress }) {
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.modalRoot}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.modalCancel}>Zatvori</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Moje recenzije</Text>
+          <View style={{ width: 70 }} />
+        </View>
+
+        {loading ? (
+          <View style={styles.reviewsCenter}>
+            <ActivityIndicator size="large" color={colors.violet} />
+          </View>
+        ) : reviews.length === 0 ? (
+          <View style={styles.reviewsCenter}>
+            <Ionicons name="star-outline" size={44} color={colors.muted} />
+            <Text style={styles.reviewsEmpty}>Još nisi napisao recenziju</Text>
+            <Text style={styles.reviewsEmptySub}>Dodaj knjigu u biblioteku i oceni je</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.reviewsList} showsVerticalScrollIndicator={false}>
+            {reviews.map(r => (
+              <TouchableOpacity key={r.id} style={styles.reviewCard} onPress={() => onBookPress(r.book.id)} activeOpacity={0.88}>
+                <View style={styles.reviewCover}>
+                  {r.book.cover_url ? (
+                    <ExpoImage source={{ uri: r.book.cover_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" />
+                  ) : (
+                    <Ionicons name="book" size={22} color={colors.muted} />
+                  )}
+                </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={styles.reviewBookTitle} numberOfLines={2}>{r.book.title}</Text>
+                  <Text style={styles.reviewBookAuthor} numberOfLines={1}>{r.book.author}</Text>
+                  <View style={{ flexDirection: 'row', gap: 2 }}>
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <Ionicons key={n} name={n <= r.rating ? 'star' : 'star-outline'} size={13} color={n <= r.rating ? colors.gold : colors.muted} />
+                    ))}
+                  </View>
+                  {r.comment ? <Text style={styles.reviewComment} numberOfLines={3}>{r.comment}</Text> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={15} color="#C8C8DC" />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+// ── Recently Viewed Modal ─────────────────────────────────────────────────────
+
+function RecentlyViewedModal({ visible, onClose, books, onBookPress }) {
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.modalRoot}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.modalCancel}>Zatvori</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Nedavno pregledano</Text>
+          <View style={{ width: 70 }} />
+        </View>
+
+        {books.length === 0 ? (
+          <View style={styles.reviewsCenter}>
+            <Ionicons name="time-outline" size={44} color={colors.muted} />
+            <Text style={styles.reviewsEmpty}>Još nisi pregledao knjige</Text>
+            <Text style={styles.reviewsEmptySub}>Knjige koje otvoriš pojaviće se ovde</Text>
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.reviewsList} showsVerticalScrollIndicator={false}>
+            {books.map(b => (
+              <TouchableOpacity key={b.id} style={styles.reviewCard} onPress={() => onBookPress(b.id)} activeOpacity={0.88}>
+                <View style={styles.reviewCover}>
+                  {b.cover_url ? (
+                    <ExpoImage source={{ uri: b.cover_url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="disk" />
+                  ) : (
+                    <Ionicons name="book" size={22} color={colors.muted} />
+                  )}
+                </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={styles.reviewBookTitle} numberOfLines={2}>{b.title}</Text>
+                  <Text style={styles.reviewBookAuthor} numberOfLines={1}>{b.author}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={15} color="#C8C8DC" />
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+// ── Stats Modal ───────────────────────────────────────────────────────────────
+
+function StatsModal({ visible, onClose, data, loading }) {
+  const stats = [
+    { icon: 'library', color: colors.violet, label: 'Knjige u biblioteci', value: data?.library_count ?? '–' },
+    { icon: 'heart',   color: colors.heartRed, label: 'Na wishlist-i', value: data?.wishlist_count ?? '–' },
+    { icon: 'star',    color: colors.gold, label: 'Recenzije', value: data?.review_count ?? '–' },
+    { icon: 'trophy',  color: colors.mint, label: 'Prosečna ocena', value: data?.avg_rating ? `${data.avg_rating} / 5` : '–' },
+  ];
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.modalRoot}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.modalCancel}>Zatvori</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Statistike čitanja</Text>
+          <View style={{ width: 70 }} />
+        </View>
+
+        {loading ? (
+          <View style={styles.reviewsCenter}>
+            <ActivityIndicator size="large" color={colors.violet} />
+          </View>
+        ) : (
+          <ScrollView contentContainerStyle={styles.statsList} showsVerticalScrollIndicator={false}>
+            {stats.map(s => (
+              <View key={s.label} style={styles.statCard}>
+                <View style={[styles.statIconBox, { backgroundColor: s.color + '20' }]}>
+                  <Ionicons name={s.icon} size={26} color={s.color} />
+                </View>
+                <Text style={styles.statLabel}>{s.label}</Text>
+                <Text style={styles.statValue}>{s.value}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    </Modal>
   );
 }
 
@@ -1244,6 +1505,36 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 13, color: colors.error, flex: 1 },
   saveBtn: { height: 54, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   saveBtnText: { color: colors.white, fontSize: 17, fontWeight: '700' },
+
+  // My reviews modal
+  reviewsCenter: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  reviewsEmpty: { fontSize: 17, fontWeight: '600', color: colors.textDark },
+  reviewsEmptySub: { fontSize: 13, color: colors.muted, textAlign: 'center' },
+  reviewsList: { padding: 16, gap: 12 },
+  reviewCard: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 14,
+    padding: 14, backgroundColor: colors.white, borderRadius: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6,
+  },
+  reviewCover: {
+    width: 52, height: 74, borderRadius: 8,
+    backgroundColor: '#EEEEf8', overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+  },
+  reviewBookTitle: { fontSize: 14, fontWeight: '600', color: colors.textDark },
+  reviewBookAuthor: { fontSize: 12, color: colors.muted2 },
+  reviewComment: { fontSize: 13, color: '#4A4A6A', lineHeight: 18, marginTop: 2 },
+
+  // Stats modal
+  statsList: { padding: 16, gap: 12 },
+  statCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    padding: 16, backgroundColor: colors.white, borderRadius: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6,
+  },
+  statIconBox: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  statLabel: { flex: 1, fontSize: 15, fontWeight: '500', color: colors.textDark },
+  statValue: { fontSize: 22, fontWeight: '700', color: colors.textDark },
 
   // Friends
   friendsSubHeader: {

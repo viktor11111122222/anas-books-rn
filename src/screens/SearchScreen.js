@@ -141,6 +141,33 @@ const AuthorRow = memo(function AuthorRow({ author, onPress }) {
   );
 });
 
+// ── User row ──────────────────────────────────────────────────────────────────
+
+const UserRow = memo(function UserRow({ user, onPress }) {
+  const initial = (user.display_name || '?')[0].toUpperCase();
+  const stats = [
+    user.library_count  > 0 && `${user.library_count} pročitano`,
+    user.wishlist_count > 0 && `${user.wishlist_count} wishlist`,
+  ].filter(Boolean).join(' · ');
+
+  return (
+    <TouchableOpacity style={styles.userRow} onPress={onPress} activeOpacity={0.85}>
+      {user.avatar_url ? (
+        <Image source={{ uri: user.avatar_url.startsWith('http') ? user.avatar_url : `${BASE_URL.replace('/api', '')}${user.avatar_url}` }} style={styles.userAvatar} contentFit="cover" cachePolicy="memory-disk" />
+      ) : (
+        <LinearGradient colors={[colors.violet, colors.sky]} style={styles.userAvatar}>
+          <Text style={styles.userAvatarText}>{initial}</Text>
+        </LinearGradient>
+      )}
+      <View style={styles.rowInfo}>
+        <Text style={styles.userName}>{user.display_name}</Text>
+        {stats ? <Text style={styles.userStats}>{stats}</Text> : null}
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+    </TouchableOpacity>
+  );
+});
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export function SearchScreen({ navigation }) {
@@ -163,6 +190,8 @@ export function SearchScreen({ navigation }) {
   const [authorResults, setAuthorResults] = useState([]);
   const [authorLoading, setAuthorLoading] = useState(false);
   const [popularAuthors, setPopularAuthors] = useState([]);
+  const [userResults, setUserResults] = useState([]);
+  const [userLoading, setUserLoading] = useState(false);
 
   const {
     books, categories,
@@ -219,19 +248,36 @@ export function SearchScreen({ navigation }) {
     }
   }, []);
 
+  const doUserSearch = useCallback(async (q) => {
+    if (!q.trim()) { setUserResults([]); return; }
+    setUserLoading(true);
+    try {
+      const res = await fetch(`${BASE_URL}/users/search?q=${encodeURIComponent(q.trim())}`);
+      const data = await res.json();
+      setUserResults(Array.isArray(data) ? data : []);
+    } catch {
+      setUserResults([]);
+    } finally {
+      setUserLoading(false);
+    }
+  }, []);
+
   const handleModeChange = useCallback((mode) => {
     searchModeRef.current = mode;
     setSearchMode(mode);
     if (mode === 'authors') {
       if (currentQuery.current.trim()) doAuthorSearch(currentQuery.current);
       else loadPopularAuthors();
+    } else if (mode === 'users') {
+      if (currentQuery.current.trim()) doUserSearch(currentQuery.current);
+      else setUserResults([]);
     } else {
       if (currentQuery.current.trim() || currentCategory.current) {
         setHasSearched(true);
         refresh(currentQuery.current.trim(), currentCategory.current);
       }
     }
-  }, [doAuthorSearch, loadPopularAuthors, refresh]);
+  }, [doAuthorSearch, doUserSearch, loadPopularAuthors, refresh]);
 
   const handleQueryChange = useCallback((text) => {
     setQuery(text);
@@ -240,10 +286,12 @@ export function SearchScreen({ navigation }) {
     debounceTimer.current = setTimeout(() => {
       if (searchModeRef.current === 'authors') {
         doAuthorSearch(text);
+      } else if (searchModeRef.current === 'users') {
+        doUserSearch(text);
       } else {
         doSearch(text, currentCategory.current);
       }
-    }, 150);
+    }, 200);
   }, [doSearch, doAuthorSearch]);
 
   const handleRecentDelete = useCallback(async (bookId) => {
@@ -272,6 +320,7 @@ export function SearchScreen({ navigation }) {
     currentCategory.current = null;
     setHasSearched(false);
     setUserResults([]);
+    setAuthorResults([]);
     inputRef.current?.focus();
   }, []);
 
@@ -319,7 +368,7 @@ export function SearchScreen({ navigation }) {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>
-            {searchMode === 'books' ? 'Pretraži knjige' : 'Pretraži korisnike'}
+            {searchMode === 'books' ? 'Pretraži knjige' : searchMode === 'authors' ? 'Pretraži autore' : 'Pretraži korisnike'}
           </Text>
           {totalBooks > 0 && searchMode === 'books' && (
             <View style={styles.statBadge}>
@@ -334,7 +383,7 @@ export function SearchScreen({ navigation }) {
             <TextInput
               ref={inputRef}
               style={styles.searchInput}
-              placeholder={searchMode === 'books' ? 'Naslov, autor, ISBN...' : 'Ime autora...'}
+              placeholder={searchMode === 'books' ? 'Naslov, autor, ISBN...' : searchMode === 'authors' ? 'Ime autora...' : 'Ime korisnika...'}
               placeholderTextColor={colors.muted}
               value={query}
               onChangeText={handleQueryChange}
@@ -345,6 +394,8 @@ export function SearchScreen({ navigation }) {
                 clearTimeout(debounceTimer.current);
                 if (searchModeRef.current === 'authors') {
                   doAuthorSearch(currentQuery.current);
+                } else if (searchModeRef.current === 'users') {
+                  doUserSearch(currentQuery.current);
                 } else {
                   doSearch(currentQuery.current, currentCategory.current);
                 }
@@ -387,6 +438,13 @@ export function SearchScreen({ navigation }) {
             <Ionicons name="person-outline" size={13} color={searchMode === 'authors' ? colors.violet : colors.muted} />
             <Text style={[styles.modeBtnText, searchMode === 'authors' && styles.modeBtnTextActive]}>Autori</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, searchMode === 'users' && styles.modeBtnActive]}
+            onPress={() => handleModeChange('users')}
+          >
+            <Ionicons name="people-outline" size={13} color={searchMode === 'users' ? colors.violet : colors.muted} />
+            <Text style={[styles.modeBtnText, searchMode === 'users' && styles.modeBtnTextActive]}>Korisnici</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -417,6 +475,45 @@ export function SearchScreen({ navigation }) {
                 <AuthorRow
                   author={item}
                   onPress={() => navigation.navigate('AuthorBooks', { author: item.author })}
+                />
+              )}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              ItemSeparatorComponent={() => <View style={[styles.separator, { marginLeft: 76 }]} />}
+              keyboardShouldPersistTaps="handled"
+            />
+          )}
+        </View>
+      ) : searchMode === 'users' ? (
+        <View style={{ flex: 1 }}>
+          {userLoading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color={colors.violet} />
+            </View>
+          ) : !query.trim() ? (
+            <View style={styles.emptyWrap}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="people" size={32} color={colors.violet} />
+              </View>
+              <Text style={styles.emptyTitle}>Pretraži korisnike</Text>
+              <Text style={styles.emptyText}>Upiši ime korisnika da pronađeš prijatelje</Text>
+            </View>
+          ) : userResults.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="people-outline" size={32} color={colors.violet} />
+              </View>
+              <Text style={styles.emptyTitle}>Nema korisnika</Text>
+              <Text style={styles.emptyText}>Nismo pronašli korisnike sa tim imenom</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={userResults}
+              keyExtractor={item => String(item.id)}
+              renderItem={({ item }) => (
+                <UserRow
+                  user={item}
+                  onPress={() => navigation.navigate('UserProfile', { userId: item.id, displayName: item.display_name })}
                 />
               )}
               contentContainerStyle={styles.listContent}
@@ -826,7 +923,7 @@ const styles = StyleSheet.create({
   },
   userAvatar: {
     width: 46, height: 46, borderRadius: 23,
-    overflow: 'hidden', justifyContent: 'center', alignItems: 'center',
+    overflow: 'hidden', justifyContent: 'center', alignItems: 'center', flexShrink: 0,
   },
   authorAvatar: {
     width: 46, height: 60, borderRadius: 8,

@@ -5,18 +5,34 @@ import { Platform } from 'react-native';
 export const BASE_URL =
   Platform.OS === 'android'
     ? 'http://10.0.2.2:3000/api'
-    : 'http://172.20.10.2:3000/api';
+    : 'http://172.20.10.3:3000/api';
 
-export async function apiRequest(path, options = {}, token = null) {
+export const FILE_BASE_URL =
+  Platform.OS === 'android'
+    ? 'http://10.0.2.2:3000'
+    : 'http://172.20.10.3:3000';
+
+export async function apiRequest(path, options = {}, token = null, timeoutMs = 10000) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: { ...headers, ...options.headers },
-  });
+  const ctrl   = new AbortController();
+  const tId    = setTimeout(() => ctrl.abort(), timeoutMs);
+  const signal = options.signal ?? ctrl.signal;
 
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.message || 'Server error.');
-  return data;
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      signal,
+      headers: { ...headers, ...options.headers },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'Server error.');
+    return data;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('Server nije dostupan. Proveri internet vezu.');
+    throw e;
+  } finally {
+    clearTimeout(tId);
+  }
 }

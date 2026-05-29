@@ -1,11 +1,30 @@
 import { useState, useCallback, useRef } from 'react';
-import { BASE_URL } from '../utils/api';
+import * as SecureStore from 'expo-secure-store';
+import { BASE_URL, apiRequest } from '../utils/api';
 
 const LIMIT = 30;
+
+function dedupeBooks(incoming, existing = []) {
+  const seenIds = new Set(existing.map(b => b.id));
+  const seenKeys = new Set(existing.map(b =>
+    `${(b.title ?? '').toLowerCase().trim()}|${(b.author ?? '').toLowerCase().trim()}`
+  ));
+  const result = [];
+  for (const b of incoming) {
+    const key = `${(b.title ?? '').toLowerCase().trim()}|${(b.author ?? '').toLowerCase().trim()}`;
+    if (seenIds.has(b.id) || seenKeys.has(key)) continue;
+    seenIds.add(b.id);
+    seenKeys.add(key);
+    result.push(b);
+  }
+  return result;
+}
 
 export function useBooks({ authorFilter } = {}) {
   const [books, setBooks] = useState([]);
   const [featuredBooks, setFeaturedBooks] = useState([]);
+  const [recommendedBooks, setRecommendedBooks] = useState([]);
+  const [forYouBooks, setForYouBooks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +56,24 @@ export function useBooks({ authorFilter } = {}) {
     } catch {}
   }, []);
 
+  const loadRecommended = useCallback(async () => {
+    try {
+      const token = await SecureStore.getItemAsync('auth_token');
+      if (!token) return;
+      const data = await apiRequest('/books/recommended', {}, token);
+      setRecommendedBooks(Array.isArray(data) ? data : []);
+    } catch {}
+  }, []);
+
+  const loadForYou = useCallback(async () => {
+    try {
+      const token = await SecureStore.getItemAsync('auth_token');
+      if (!token) return;
+      const data = await apiRequest('/books/for-you', {}, token);
+      setForYouBooks(Array.isArray(data) ? data : []);
+    } catch {}
+  }, []);
+
   const load = useCallback(async (page, searchQuery, category, isRefresh = false) => {
     // Cancel any in-flight request
     if (abortRef.current) abortRef.current.abort();
@@ -51,15 +88,16 @@ export function useBooks({ authorFilter } = {}) {
       const json = await res.json();
       const newBooks = json.books ?? [];
       if (isRefresh || page === 1) {
-        setBooks(newBooks);
+        setBooks(dedupeBooks(newBooks));
       } else {
-        setBooks(prev => [...prev, ...newBooks]);
+        setBooks(prev => [...prev, ...dedupeBooks(newBooks, prev)]);
       }
       setHasMore(newBooks.length === LIMIT);
     } catch (e) {
-      if (e.name === 'AbortError') return; // cancelled — don't update state
+      if (e.name === 'AbortError') return;
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [buildURL]);
 
   const refresh = useCallback(async (searchQuery = '', category = null) => {
@@ -75,9 +113,15 @@ export function useBooks({ authorFilter } = {}) {
   }, [isLoading, hasMore, load]);
 
   const fetchDetail = useCallback(async (id) => {
-    const res = await fetch(`${BASE_URL}/books/${id}`);
-    if (!res.ok) throw new Error('Not found');
-    return res.json();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(`${BASE_URL}/books/${id}`, { signal: controller.signal });
+      if (!res.ok) throw new Error('Not found');
+      return res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
   }, []);
 
   const fetchSimilar = useCallback(async (id) => {
@@ -97,10 +141,10 @@ export function useBooks({ authorFilter } = {}) {
   }, []);
 
   return {
-    books, featuredBooks, categories,
+    books, featuredBooks, recommendedBooks, forYouBooks, categories,
     selectedCategory, setSelectedCategory,
     isLoading, hasMore,
-    loadCategories, loadFeatured,
+    loadCategories, loadFeatured, loadRecommended, loadForYou,
     refresh, loadMore, fetchDetail, fetchSimilar, fetchByAuthor,
   };
 }

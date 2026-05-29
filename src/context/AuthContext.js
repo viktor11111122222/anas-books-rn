@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import { SplashScreen } from '../screens/SplashScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { apiRequest, BASE_URL } from '../utils/api';
+import { apiRequest, BASE_URL, FILE_BASE_URL } from '../utils/api';
 
 const TOKEN_KEY            = 'auth_token';
 const USER_KEY             = 'auth_user';
@@ -54,6 +55,7 @@ export function AuthProvider({ children }) {
     AsyncStorage.setItem(LIBRARY_BOOKS_KEY, JSON.stringify(books));
   }, []);
 
+
   // ── Server sync helper ────────────────────────────────────────────────────────
   // Fetches wishlist + library from server and replaces local state.
   // Called right after login / register so data is fresh immediately.
@@ -89,27 +91,32 @@ export function AuthProvider({ children }) {
         ]);
 
         if (token && userRaw) {
-          // Validate token is still accepted by server
-          try {
-            await apiRequest('/auth/me', {}, token);
-            setUserSession(JSON.parse(userRaw));
-            // Restore cached local data immediately
-            if (idsRaw)      setWishlistIdsState(new Set(JSON.parse(idsRaw)));
-            if (booksRaw)    setWishlistBooksState(JSON.parse(booksRaw));
-            if (foldersRaw)  setWishlistFoldersState(JSON.parse(foldersRaw));
-            if (libIdsRaw)   setLibraryIdsState(new Set(JSON.parse(libIdsRaw)));
-            if (libBooksRaw) setLibraryBooksState(JSON.parse(libBooksRaw));
-            // Sync fresh data from server in background
-            syncAllFromServer(token);
-          } catch {
-            // Token expired or rejected — clear everything
-            await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
-            await SecureStore.deleteItemAsync(USER_KEY).catch(() => {});
-            await AsyncStorage.multiRemove([
-              WISHLIST_IDS_KEY, WISHLIST_BOOKS_KEY,
-              LIBRARY_IDS_KEY, LIBRARY_BOOKS_KEY,
-            ]);
-          }
+          // Restore cached session immediately so app loads without waiting for network
+          setUserSession(JSON.parse(userRaw));
+          if (idsRaw)      setWishlistIdsState(new Set(JSON.parse(idsRaw)));
+          if (booksRaw)    setWishlistBooksState(JSON.parse(booksRaw));
+          if (foldersRaw)  setWishlistFoldersState(JSON.parse(foldersRaw));
+          if (libIdsRaw)   setLibraryIdsState(new Set(JSON.parse(libIdsRaw)));
+          if (libBooksRaw) setLibraryBooksState(JSON.parse(libBooksRaw));
+
+          // Validate token with server in background (timeout handled by apiRequest)
+          apiRequest('/auth/me', {}, token)
+            .then(() => {
+              syncAllFromServer(token);
+            })
+            .catch(async (e) => {
+              // Only sign out on explicit server rejection (401), not network/timeout errors
+              const msg = e?.message ?? '';
+              if (msg.includes('autorizovan') || msg.includes('validan')) {
+                setUserSession(null);
+                await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
+                await SecureStore.deleteItemAsync(USER_KEY).catch(() => {});
+                await AsyncStorage.multiRemove([
+                  WISHLIST_IDS_KEY, WISHLIST_BOOKS_KEY,
+                  LIBRARY_IDS_KEY, LIBRARY_BOOKS_KEY,
+                ]).catch(() => {});
+              }
+            });
         }
       } catch {}
       setBootstrapped(true);
@@ -236,10 +243,9 @@ export function AuthProvider({ children }) {
       const token = await getToken();
       const p = await apiRequest('/auth/me', {}, token);
       setProfile(p);
-      const fileBase = BASE_URL.replace('/api', '');
       const rawAvatar = p.avatar_url ?? null;
       const resolvedAvatar = rawAvatar
-        ? (rawAvatar.startsWith('http') ? rawAvatar : `${fileBase}${rawAvatar}`)
+        ? (rawAvatar.startsWith('http') ? rawAvatar : `${FILE_BASE_URL}${rawAvatar}`)
         : null;
       const updatedSession = {
         ...userSession,
@@ -257,7 +263,7 @@ export function AuthProvider({ children }) {
     if (!userSession) return null;
     try {
       const token = await getToken();
-      const fileServerBase = BASE_URL.replace('/api', '');
+      const fileServerBase = FILE_BASE_URL;
       const formData = new FormData();
       formData.append('avatar', {
         uri: localUri,
@@ -305,6 +311,8 @@ export function AuthProvider({ children }) {
   async function toggleWishlist(bookId, { title, author, coverUrl, minPrice, storeCount, folderId = null } = {}) {
     if (!userSession) return;
     const wasIn = wishlistIds.has(bookId);
+    const prevIds = wishlistIds;
+    const prevBooks = wishlistBooks;
     const newIds = new Set(wishlistIds);
     let newBooks = [...wishlistBooks];
     if (wasIn) {
@@ -325,7 +333,10 @@ export function AuthProvider({ children }) {
       } else {
         await apiRequest(`/wishlist/${bookId}`, { method: 'POST', body: JSON.stringify({ folderId }) }, token);
       }
-    } catch {}
+    } catch {
+      setWishlistIds(prevIds);
+      setWishlistBooks(prevBooks);
+    }
   }
 
   async function syncWishlist() {
@@ -466,6 +477,8 @@ export function AuthProvider({ children }) {
   async function toggleLibrary(bookId, { title, author, coverUrl, minPrice } = {}) {
     if (!userSession) return;
     const wasIn = libraryIds.has(bookId);
+    const prevIds = libraryIds;
+    const prevBooks = libraryBooks;
     const newIds = new Set(libraryIds);
     let newBooks = [...libraryBooks];
     if (wasIn) {
@@ -486,7 +499,10 @@ export function AuthProvider({ children }) {
       } else {
         await apiRequest(`/library/${bookId}`, { method: 'POST', body: JSON.stringify({}) }, token);
       }
-    } catch {}
+    } catch {
+      setLibraryIds(prevIds);
+      setLibraryBooks(prevBooks);
+    }
   }
 
   async function syncLibrary() {
@@ -501,14 +517,7 @@ export function AuthProvider({ children }) {
 
   function clearError() { setErrorMessage(null); }
 
-  // Show a blank loading screen while reading SecureStore — prevents flash of auth screen
-  if (!bootstrapped) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#F7F7FC', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#7C5CBF" />
-      </View>
-    );
-  }
+  if (!bootstrapped) return <SplashScreen />;
 
   return (
     <AuthContext.Provider value={{

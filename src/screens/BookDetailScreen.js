@@ -11,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -407,11 +408,26 @@ export function BookDetailScreen({ route, navigation }) {
     setSimilarBooks([]);
     setAuthorBooks([]);
     setReviews([]);
+    SecureStore.getItemAsync('auth_token').then(token => {
+      if (token) {
+        fetch(`${BASE_URL}/books/${bookId}/view`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+
     fetchDetail(bookId)
       .then(data => {
         setDetail(data);
         fetchSimilar(bookId).then(setSimilarBooks);
         fetchByAuthor(bookId).then(setAuthorBooks);
+        AsyncStorage.getItem('recently_viewed').then(val => {
+          const prev = val ? JSON.parse(val) : [];
+          const entry = { id: data.id, title: data.title, author: data.author, cover_url: data.cover_url ?? null };
+          const updated = [entry, ...prev.filter(b => b.id !== data.id)].slice(0, 30);
+          AsyncStorage.setItem('recently_viewed', JSON.stringify(updated));
+        }).catch(() => {});
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));

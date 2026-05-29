@@ -1,10 +1,12 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Keyboard, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+
+const LOGO = require('../../assets/logo.png');
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { InputField } from '../components/InputField';
@@ -48,9 +50,7 @@ export function LoginScreen({ navigation }) {
           <View style={[styles.circle, { width: 200, height: 200, right: -80, bottom: 60, backgroundColor: colors.violet + '12' }]} />
 
           <View style={styles.logoSection}>
-            <LinearGradient colors={[colors.violet, colors.sky]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logoBg}>
-              <Ionicons name="mail" size={32} color={colors.white} />
-            </LinearGradient>
+            <Image source={LOGO} style={styles.logoImg} resizeMode="contain" />
             <Text style={styles.appName}>Resetuj lozinku</Text>
             <Text style={styles.tagline}>Pošaljemo ti link za reset</Text>
           </View>
@@ -120,9 +120,7 @@ export function LoginScreen({ navigation }) {
 
         {/* Logo */}
         <View style={styles.logoSection}>
-          <LinearGradient colors={[colors.violet, colors.sky]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logoBg}>
-            <Ionicons name="library" size={36} color={colors.white} />
-          </LinearGradient>
+          <Image source={LOGO} style={styles.logoImg} resizeMode="contain" />
           <Text style={styles.appName}>AnasBooks</Text>
           <Text style={styles.tagline}>Pronađi i uporedi cene knjiga</Text>
         </View>
@@ -188,12 +186,10 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.white },
   scroll: { flexGrow: 1, overflow: 'hidden' },
   circle: { position: 'absolute', borderRadius: 999 },
-  logoSection: { alignItems: 'center', paddingTop: 40, paddingBottom: 44 },
-  logoBg: {
-    width: 90, height: 90, borderRadius: 45,
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 14,
-    shadowColor: colors.violet, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12,
+  logoSection: { alignItems: 'center', paddingTop: 32, paddingBottom: 36 },
+  logoImg: {
+    width: 220, height: 124,
+    marginBottom: 10,
   },
   appName: { fontSize: 34, fontWeight: '700', color: colors.textDark, marginBottom: 4 },
   tagline: { fontSize: 14, fontWeight: '500', color: colors.muted },

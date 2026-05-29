@@ -1,10 +1,12 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
+import * as SecureStore from 'expo-secure-store';
+import { BASE_URL } from '../utils/api';
 
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../utils/colors';
@@ -20,6 +22,10 @@ import { PrivacyPolicyScreen }  from '../screens/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from '../screens/TermsOfServiceScreen';
 import { UserProfileScreen }    from '../screens/UserProfileScreen';
 import { InviteScreen }         from '../screens/InviteScreen';
+import { ExchangeScreen }         from '../screens/ExchangeScreen';
+import { ExchangeRequestsScreen } from '../screens/ExchangeRequestsScreen';
+import { GiftsScreen }            from '../screens/GiftsScreen';
+import { NotificationsScreen }    from '../screens/NotificationsScreen';
 
 const linking = {
   prefixes: [Linking.createURL('/'), 'anasbooks://'],
@@ -56,9 +62,14 @@ function SearchStack() {
 function HomeStack() {
   return (
     <HomeNav.Navigator screenOptions={{ headerShown: false }}>
-      <HomeNav.Screen name="HomeMain"    component={BooksScreen} />
-      <HomeNav.Screen name="BookDetail"  component={BookDetailScreen} />
-      <HomeNav.Screen name="AuthorBooks" component={AuthorBooksScreen} />
+      <HomeNav.Screen name="HomeMain"        component={BooksScreen} />
+      <HomeNav.Screen name="BookDetail"      component={BookDetailScreen} />
+      <HomeNav.Screen name="AuthorBooks"     component={AuthorBooksScreen} />
+      <HomeNav.Screen name="Exchange"        component={ExchangeScreen} />
+      <HomeNav.Screen name="ExchangeRequests" component={ExchangeRequestsScreen} />
+      <HomeNav.Screen name="UserProfile"     component={UserProfileScreen} />
+      <HomeNav.Screen name="Gifts"           component={GiftsScreen} />
+      <HomeNav.Screen name="Notifications"   component={NotificationsScreen} />
     </HomeNav.Navigator>
   );
 }
@@ -66,12 +77,16 @@ function HomeStack() {
 function ProfileStack() {
   return (
     <ProfileNav.Navigator screenOptions={{ headerShown: false }}>
-      <ProfileNav.Screen name="ProfileMain"    component={ProfileScreen} />
-      <ProfileNav.Screen name="BookDetail"     component={BookDetailScreen} />
-      <ProfileNav.Screen name="AuthorBooks"    component={AuthorBooksScreen} />
-      <ProfileNav.Screen name="PrivacyPolicy"  component={PrivacyPolicyScreen} />
-      <ProfileNav.Screen name="TermsOfService" component={TermsOfServiceScreen} />
-      <ProfileNav.Screen name="UserProfile"    component={UserProfileScreen} />
+      <ProfileNav.Screen name="ProfileMain"       component={ProfileScreen} />
+      <ProfileNav.Screen name="BookDetail"        component={BookDetailScreen} />
+      <ProfileNav.Screen name="AuthorBooks"       component={AuthorBooksScreen} />
+      <ProfileNav.Screen name="PrivacyPolicy"     component={PrivacyPolicyScreen} />
+      <ProfileNav.Screen name="TermsOfService"    component={TermsOfServiceScreen} />
+      <ProfileNav.Screen name="UserProfile"       component={UserProfileScreen} />
+      <ProfileNav.Screen name="Exchange"          component={ExchangeScreen} />
+      <ProfileNav.Screen name="ExchangeRequests"  component={ExchangeRequestsScreen} />
+      <ProfileNav.Screen name="Gifts"             component={GiftsScreen} />
+      <ProfileNav.Screen name="Notifications"     component={NotificationsScreen} />
     </ProfileNav.Navigator>
   );
 }
@@ -79,36 +94,81 @@ function ProfileStack() {
 // ── Custom tab bar ────────────────────────────────────────────────────────────
 
 const TAB_ICONS = {
-  Search:  { active: 'search',  inactive: 'search-outline' },
-  Home:    { active: 'home',    inactive: 'home-outline' },
-  Profile: { active: 'person',  inactive: 'person-outline' },
+  Search:  { active: 'search', inactive: 'search-outline' },
+  Home:    { active: 'home',   inactive: 'home-outline' },
+  Profile: { active: 'person', inactive: 'person-outline' },
 };
 
+const TAB_LABELS = {
+  Search:  'Pretraga',
+  Home:    'Home',
+  Profile: 'Profil',
+};
+
+function useUnreadCount(userSession) {
+  const [count, setCount] = useState(0);
+  const appState = useRef(AppState.currentState);
+
+  async function fetchCount() {
+    if (!userSession) { setCount(0); return; }
+    try {
+      const token = await SecureStore.getItemAsync('auth_token');
+      const res = await fetch(`${BASE_URL}/notifications/unread-count`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) { const d = await res.json(); setCount(d.count ?? 0); }
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchCount();
+    const interval = setInterval(fetchCount, 30000);
+    const sub = AppState.addEventListener('change', next => {
+      if (appState.current !== 'active' && next === 'active') fetchCount();
+      appState.current = next;
+    });
+    return () => { clearInterval(interval); sub.remove(); };
+  }, [userSession]);
+
+  return [count, () => setCount(0)];
+}
+
 function CustomTabBar({ state, navigation }) {
+  const { userSession } = useAuth();
+  const [unreadCount] = useUnreadCount(userSession);
+
   return (
     <View style={styles.tabBar}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const icons = TAB_ICONS[route.name];
+        const showBadge = route.name === 'Profile' && unreadCount > 0;
         return (
           <TouchableOpacity
             key={route.key}
             style={styles.tabItem}
             onPress={() => {
               const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
+              if (!isFocused && !event.defaultPrevented) navigation.navigate(route.name);
             }}
             activeOpacity={0.7}
           >
-            <Ionicons
-              name={isFocused ? icons.active : icons.inactive}
-              size={24}
-              color={isFocused ? colors.violet : '#C0C0D8'}
-            />
+            <View>
+              <Ionicons
+                name={isFocused ? icons.active : icons.inactive}
+                size={24}
+                color={isFocused ? colors.violet : '#C0C0D8'}
+              />
+              {showBadge && (
+                <View style={styles.badgeDot}>
+                  {unreadCount > 9
+                    ? <Text style={styles.badgeDotText}>9+</Text>
+                    : <Text style={styles.badgeDotText}>{unreadCount}</Text>}
+                </View>
+              )}
+            </View>
             <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-              {route.name}
+              {TAB_LABELS[route.name] ?? route.name}
             </Text>
           </TouchableOpacity>
         );
@@ -188,4 +248,13 @@ const styles = StyleSheet.create({
   },
   tabLabel: { fontSize: 11, color: '#C0C0D8' },
   tabLabelActive: { color: colors.violet, fontWeight: '600' },
+  badgeDot: {
+    position: 'absolute', top: -4, right: -6,
+    backgroundColor: '#E8445A', borderRadius: 8,
+    minWidth: 16, height: 16,
+    justifyContent: 'center', alignItems: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5, borderColor: colors.white,
+  },
+  badgeDotText: { fontSize: 9, fontWeight: '700', color: colors.white },
 });
