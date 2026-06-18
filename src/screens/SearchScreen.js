@@ -195,7 +195,7 @@ export function SearchScreen({ navigation }) {
 
   const {
     books, categories,
-    isLoading, hasMore,
+    isLoading, hasMore, total,
     loadCategories, refresh, loadMore,
   } = useBooks();
 
@@ -537,7 +537,7 @@ export function SearchScreen({ navigation }) {
               );
             })()}
             <Text style={styles.resultCount}>
-              {isLoading ? 'Tražim...' : `${books.length} rezultata`}
+              {isLoading && total == null ? 'Tražim...' : `${(total ?? books.length).toLocaleString()} rezultata`}
             </Text>
           </View>
 

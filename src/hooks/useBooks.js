@@ -4,18 +4,48 @@ import { BASE_URL, apiRequest } from '../utils/api';
 
 const LIMIT = 30;
 
+function normalizeTitle(title) {
+  return (title ?? '')
+    .toLowerCase()
+    .replace(/[čćžšđ]/g, c => ({ č: 'c', ć: 'c', ž: 'z', š: 's', đ: 'd' })[c] || c)
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
+}
+
+const GENERIC_AUTHORS = new Set(['nepoznat autor', 'nepoznati autor', 'unknown', 'autor nepoznat']);
+
 function dedupeBooks(incoming, existing = []) {
-  const seenIds = new Set(existing.map(b => b.id));
-  const seenKeys = new Set(existing.map(b =>
-    `${(b.title ?? '').toLowerCase().trim()}|${(b.author ?? '').toLowerCase().trim()}`
-  ));
+  const seenIds   = new Set(existing.map(b => b.id));
+  const seenTitles = new Map(); // normalizedTitle → index in result
+
+  // Seed from existing
+  existing.forEach((b) => seenTitles.set(normalizeTitle(b.title), -1));
+
   const result = [];
   for (const b of incoming) {
-    const key = `${(b.title ?? '').toLowerCase().trim()}|${(b.author ?? '').toLowerCase().trim()}`;
-    if (seenIds.has(b.id) || seenKeys.has(key)) continue;
+    if (seenIds.has(b.id)) continue;
     seenIds.add(b.id);
-    seenKeys.add(key);
-    result.push(b);
+
+    const tk = normalizeTitle(b.title);
+    if (!tk) { result.push(b); continue; }
+
+    if (!seenTitles.has(tk)) {
+      seenTitles.set(tk, result.length);
+      result.push(b);
+    } else {
+      // Title already seen — replace only if current entry has a real author
+      // and the stored one has a generic/missing author
+      const idx = seenTitles.get(tk);
+      if (idx >= 0) {
+        const stored = result[idx];
+        const storedGeneric = GENERIC_AUTHORS.has((stored.author ?? '').toLowerCase().trim());
+        const incomingReal  = !GENERIC_AUTHORS.has((b.author ?? '').toLowerCase().trim()) && b.author;
+        if (storedGeneric && incomingReal) {
+          result[idx] = b;
+          seenTitles.set(tk, idx);
+        }
+      }
+    }
   }
   return result;
 }
@@ -29,6 +59,7 @@ export function useBooks({ authorFilter } = {}) {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(null);
   const pageRef = useRef(1);
   const abortRef = useRef(null);
 
@@ -89,6 +120,7 @@ export function useBooks({ authorFilter } = {}) {
       const newBooks = json.books ?? [];
       if (isRefresh || page === 1) {
         setBooks(dedupeBooks(newBooks));
+        if (json.total != null) setTotal(json.total);
       } else {
         setBooks(prev => [...prev, ...dedupeBooks(newBooks, prev)]);
       }
@@ -143,7 +175,7 @@ export function useBooks({ authorFilter } = {}) {
   return {
     books, featuredBooks, recommendedBooks, forYouBooks, categories,
     selectedCategory, setSelectedCategory,
-    isLoading, hasMore,
+    isLoading, hasMore, total,
     loadCategories, loadFeatured, loadRecommended, loadForYou,
     refresh, loadMore, fetchDetail, fetchSimilar, fetchByAuthor,
   };
