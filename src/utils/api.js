@@ -5,12 +5,12 @@ import { Platform } from 'react-native';
 export const BASE_URL =
   Platform.OS === 'android'
     ? 'http://10.0.2.2:3000/api'
-    : 'http://172.20.10.2:3000/api';
+    : 'http://172.20.10.5:3000/api';
 
 export const FILE_BASE_URL =
   Platform.OS === 'android'
     ? 'http://10.0.2.2:3000'
-    : 'http://172.20.10.2:3000';
+    : 'http://172.20.10.5:3000';
 
 export async function apiRequest(path, options = {}, token = null, timeoutMs = 10000) {
   const headers = { 'Content-Type': 'application/json' };

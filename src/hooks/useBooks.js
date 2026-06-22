@@ -106,10 +106,11 @@ export function useBooks({ authorFilter } = {}) {
   }, []);
 
   const load = useCallback(async (page, searchQuery, category, isRefresh = false) => {
-    // Cancel any in-flight request
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     setIsLoading(true);
     try {
@@ -126,9 +127,10 @@ export function useBooks({ authorFilter } = {}) {
       }
       setHasMore(newBooks.length === LIMIT);
     } catch (e) {
-      if (e.name === 'AbortError') return;
+      if (e.name === 'AbortError' && abortRef.current !== controller) return;
     } finally {
-      setIsLoading(false);
+      clearTimeout(timeoutId);
+      if (abortRef.current === controller) setIsLoading(false);
     }
   }, [buildURL]);
 

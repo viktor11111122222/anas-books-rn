@@ -153,7 +153,7 @@ const sectionTitle = selectedCategory
               <Text style={styles.sectionBadgeText}>Na osnovu pretraživanja</Text>
             </View>
           </View>
-          <FeaturedCarousel books={filteredForYou} onBookPress={handleFeaturedPress} />
+          <PeekCarousel books={filteredForYou} onBookPress={handleFeaturedPress} />
         </View>
       )}
 
