@@ -355,13 +355,13 @@ export function UserProfileScreen({ route, navigation }) {
                 isOwn={profile.is_own}
                 isFriend={friendStatus === 'friends'}
               />
-            ) : (library ?? []).length === 0 ? (
+            ) : !Array.isArray(library) || library.length === 0 ? (
               <EmptySection label="Biblioteka je prazna" icon="library" />
             ) : (
               <>
                 {profile.is_own && !profile.library_public && <OwnerPrivateBanner section="Biblioteka" />}
                 <View style={styles.listWrap}>
-                  {(library ?? []).map(item => (
+                  {library.map(item => (
                     <BookRow
                       key={item.id}
                       item={item}

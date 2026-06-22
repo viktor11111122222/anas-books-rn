@@ -13,6 +13,16 @@ import { BASE_URL } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../utils/colors';
 
+function ModalSafeView({ children }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={styles.modalRoot}>
+      <View style={{ height: insets.top, backgroundColor: colors.white }} />
+      {children}
+    </View>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function UserAvatar({ uri, name, size = 36 }) {
@@ -113,7 +123,7 @@ function RateModal({ visible, request, onClose, onRated }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.modalRoot}>
+        <ModalSafeView>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={onClose}>
               <Text style={styles.modalCancel}>Odustani</Text>
@@ -171,7 +181,7 @@ function RateModal({ visible, request, onClose, onRated }) {
                   </>}
             </TouchableOpacity>
           </View>
-        </View>
+        </ModalSafeView>
       </KeyboardAvoidingView>
     </Modal>
   );

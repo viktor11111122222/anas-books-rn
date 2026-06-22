@@ -13,6 +13,16 @@ import { BASE_URL } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../utils/colors';
 
+function ModalSafeView({ children }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={styles.modalRoot}>
+      <View style={{ height: insets.top, backgroundColor: colors.white }} />
+      {children}
+    </View>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function useDebounce(value, delay) {
@@ -223,7 +233,7 @@ function RequestModal({ visible, listing, onClose }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.modalRoot}>
+        <ModalSafeView>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={onClose}>
               <Text style={styles.modalCancel}>Odustani</Text>
@@ -305,7 +315,7 @@ function RequestModal({ visible, listing, onClose }) {
                   </>}
             </TouchableOpacity>
           </View>
-        </View>
+        </ModalSafeView>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -368,7 +378,7 @@ function AddListingModal({ visible, onClose, onAdded }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.modalRoot}>
+        <ModalSafeView>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={onClose}>
               <Text style={styles.modalCancel}>Odustani</Text>
@@ -447,7 +457,7 @@ function AddListingModal({ visible, onClose, onAdded }) {
                   </>}
             </TouchableOpacity>
           </View>
-        </View>
+        </ModalSafeView>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -575,6 +585,7 @@ function BrowseTab({ navigation }) {
 
 function MyTab() {
   const { userSession } = useAuth();
+  const insets = useSafeAreaInsets();
   const [listings, setListings]   = useState([]);
   const [loading, setLoading]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -695,7 +706,7 @@ function MyTab() {
         )}
       />
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowAdd(true)} activeOpacity={0.85}>
+      <TouchableOpacity style={[styles.fab, { bottom: 24 + insets.bottom }]} onPress={() => setShowAdd(true)} activeOpacity={0.85}>
         <Ionicons name="add" size={26} color={colors.white} />
       </TouchableOpacity>
 
@@ -863,7 +874,7 @@ const styles = StyleSheet.create({
   deleteBtnText: { fontSize: 13, fontWeight: '600', color: colors.error },
 
   fab: {
-    position: 'absolute', bottom: 24, right: 20,
+    position: 'absolute', right: 20,
     width: 54, height: 54, borderRadius: 27,
     backgroundColor: colors.violet,
     justifyContent: 'center', alignItems: 'center',
@@ -871,7 +882,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 
-  // Modal
+  // Modal (modalRoot used by ModalSafeView)
   modalRoot: { flex: 1, backgroundColor: colors.background },
   modalHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

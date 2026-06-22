@@ -62,6 +62,8 @@ export function useBooks({ authorFilter } = {}) {
   const [total, setTotal] = useState(null);
   const pageRef = useRef(1);
   const abortRef = useRef(null);
+  const isLoadingRef = useRef(false);
+  const hasMoreRef = useRef(true);
 
   const buildURL = useCallback((page, searchQuery, category) => {
     const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
@@ -113,6 +115,7 @@ export function useBooks({ authorFilter } = {}) {
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     setIsLoading(true);
+    isLoadingRef.current = true;
     try {
       const res = await fetch(buildURL(page, searchQuery, category), {
         signal: controller.signal,
@@ -125,26 +128,32 @@ export function useBooks({ authorFilter } = {}) {
       } else {
         setBooks(prev => [...prev, ...dedupeBooks(newBooks, prev)]);
       }
-      setHasMore(newBooks.length === LIMIT);
+      const more = newBooks.length === LIMIT;
+      setHasMore(more);
+      hasMoreRef.current = more;
     } catch (e) {
       if (e.name === 'AbortError' && abortRef.current !== controller) return;
     } finally {
       clearTimeout(timeoutId);
-      if (abortRef.current === controller) setIsLoading(false);
+      if (abortRef.current === controller) {
+        setIsLoading(false);
+        isLoadingRef.current = false;
+      }
     }
   }, [buildURL]);
 
   const refresh = useCallback(async (searchQuery = '', category = null) => {
     pageRef.current = 1;
     setHasMore(true);
+    hasMoreRef.current = true;
     await load(1, searchQuery, category, true);
   }, [load]);
 
   const loadMore = useCallback(async (searchQuery = '', category = null) => {
-    if (isLoading || !hasMore) return;
+    if (isLoadingRef.current || !hasMoreRef.current) return;
     pageRef.current += 1;
     await load(pageRef.current, searchQuery, category, false);
-  }, [isLoading, hasMore, load]);
+  }, [load]);
 
   const fetchDetail = useCallback(async (id) => {
     const controller = new AbortController();

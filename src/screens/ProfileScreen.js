@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Switch,
-  StyleSheet, Dimensions, FlatList, Modal,
+  StyleSheet, Dimensions, useWindowDimensions, FlatList, Modal,
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, TextInput, Share,
 } from 'react-native';
 import * as Linking from 'expo-linking';
@@ -24,10 +24,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { InputField } from '../components/InputField';
+import { BASE_URL } from '../utils/api';
 import { colors } from '../utils/colors';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const TAB_WIDTH = SCREEN_WIDTH / 3;
+const { width: SCREEN_WIDTH_STATIC } = Dimensions.get('window');
+const TAB_WIDTH = SCREEN_WIDTH_STATIC / 3;
 const PAGES = ['Biblioteka', 'Profil', 'Wishlist'];
 
 // ── Profile page container ────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ const ReanimatedScrollView = Reanimated.createAnimatedComponent(ScrollView);
 
 export function ProfileScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const TAB_WIDTH = SCREEN_WIDTH / 3;
   const [page, setPage] = useState(1);
   const { syncWishlist } = useAuth();
   const scrollRef = useAnimatedRef();
@@ -79,6 +82,16 @@ export function ProfileScreen({ navigation }) {
     })();
   }
 
+  const didInitScroll = React.useRef(false);
+  function handlePagerLayout() {
+    if (didInitScroll.current) return;
+    didInitScroll.current = true;
+    runOnUI(() => {
+      'worklet';
+      scrollTo(scrollRef, SCREEN_WIDTH, 0, false);
+    })();
+  }
+
   function onScrollEnd(e) {
     const x = e.nativeEvent.contentOffset.x;
     const i = Math.round(x / SCREEN_WIDTH);
@@ -113,6 +126,7 @@ export function ProfileScreen({ navigation }) {
         onScroll={scrollHandler}
         onMomentumScrollEnd={onScrollEnd}
         contentOffset={{ x: SCREEN_WIDTH, y: 0 }}
+        onLayout={handlePagerLayout}
         style={{ flex: 1 }}
       >
         <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
@@ -561,7 +575,6 @@ function ProfilePage({ navigation }) {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
 
-  const { BASE_URL } = require('../utils/api');
 
   const loadMyReviews = useCallback(async () => {
     if (!userSession?.id) return;
@@ -1088,12 +1101,22 @@ function ProfileRow({ icon, iconColor, label, children }) {
   );
 }
 
+function ModalSafeView({ children }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={styles.modalRoot}>
+      <View style={{ height: insets.top, backgroundColor: colors.white }} />
+      {children}
+    </View>
+  );
+}
+
 // ── My Reviews Modal ──────────────────────────────────────────────────────────
 
 function MyReviewsModal({ visible, onClose, reviews, loading, onBookPress }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.modalRoot}>
+      <ModalSafeView>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.modalCancel}>Zatvori</Text>
@@ -1138,7 +1161,7 @@ function MyReviewsModal({ visible, onClose, reviews, loading, onBookPress }) {
             ))}
           </ScrollView>
         )}
-      </View>
+      </ModalSafeView>
     </Modal>
   );
 }
@@ -1148,7 +1171,7 @@ function MyReviewsModal({ visible, onClose, reviews, loading, onBookPress }) {
 function RecentlyViewedModal({ visible, onClose, books, onBookPress }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.modalRoot}>
+      <ModalSafeView>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.modalCancel}>Zatvori</Text>
@@ -1183,7 +1206,7 @@ function RecentlyViewedModal({ visible, onClose, books, onBookPress }) {
             ))}
           </ScrollView>
         )}
-      </View>
+      </ModalSafeView>
     </Modal>
   );
 }
@@ -1200,7 +1223,7 @@ function StatsModal({ visible, onClose, data, loading }) {
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.modalRoot}>
+      <ModalSafeView>
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.modalCancel}>Zatvori</Text>
@@ -1226,7 +1249,7 @@ function StatsModal({ visible, onClose, data, loading }) {
             ))}
           </ScrollView>
         )}
-      </View>
+      </ModalSafeView>
     </Modal>
   );
 }
@@ -1249,7 +1272,7 @@ function ChangePasswordModal({ visible, onClose }) {
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { reset(); onClose(); }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.modalRoot}>
+        <ModalSafeView>
           <View style={styles.modalHeader}>
             <TouchableOpacity onPress={() => { reset(); onClose(); }}>
               <Text style={styles.modalCancel}>Odustani</Text>
@@ -1280,7 +1303,7 @@ function ChangePasswordModal({ visible, onClose }) {
               </LinearGradient>
             </TouchableOpacity>
           </View>
-        </View>
+        </ModalSafeView>
       </KeyboardAvoidingView>
     </Modal>
   );

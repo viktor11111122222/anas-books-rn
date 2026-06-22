@@ -13,7 +13,8 @@ export const FILE_BASE_URL =
     : 'http://172.20.10.5:3000';
 
 export async function apiRequest(path, options = {}, token = null, timeoutMs = 10000) {
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = {};
+  if (options.body) headers['Content-Type'] = 'application/json';
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const ctrl   = new AbortController();

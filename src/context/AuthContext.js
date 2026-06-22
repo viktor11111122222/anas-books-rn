@@ -60,7 +60,7 @@ export function AuthProvider({ children }) {
   // Fetches wishlist + library from server and replaces local state.
   // Called right after login / register so data is fresh immediately.
 
-  async function syncAllFromServer(token) {
+  const syncAllFromServer = useCallback(async (token) => {
     try {
       const [wishlistData, libraryData, foldersData] = await Promise.all([
         apiRequest('/wishlist', {}, token),
@@ -73,7 +73,7 @@ export function AuthProvider({ children }) {
       setLibraryIds(new Set(libraryData.map(b => b.id)));
       setLibraryBooks(libraryData);
     } catch {}
-  }
+  }, [setWishlistIds, setWishlistBooks, setWishlistFolders, setLibraryIds, setLibraryBooks]);
 
   // ── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -112,7 +112,7 @@ export function AuthProvider({ children }) {
                 await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => {});
                 await SecureStore.deleteItemAsync(USER_KEY).catch(() => {});
                 await AsyncStorage.multiRemove([
-                  WISHLIST_IDS_KEY, WISHLIST_BOOKS_KEY,
+                  WISHLIST_IDS_KEY, WISHLIST_BOOKS_KEY, WISHLIST_FOLDERS_KEY,
                   LIBRARY_IDS_KEY, LIBRARY_BOOKS_KEY,
                 ]).catch(() => {});
               }

@@ -405,6 +405,7 @@ export function BookDetailScreen({ route, navigation }) {
   };
 
   useEffect(() => {
+    let cancelled = false;
     setSimilarBooks([]);
     setAuthorBooks([]);
     setReviews([]);
@@ -419,9 +420,10 @@ export function BookDetailScreen({ route, navigation }) {
 
     fetchDetail(bookId)
       .then(data => {
+        if (cancelled) return;
         setDetail(data);
-        fetchSimilar(bookId).then(setSimilarBooks);
-        fetchByAuthor(bookId).then(setAuthorBooks);
+        fetchSimilar(bookId).then(d => { if (!cancelled) setSimilarBooks(d); });
+        fetchByAuthor(bookId).then(d => { if (!cancelled) setAuthorBooks(d); });
         AsyncStorage.getItem('recently_viewed').then(val => {
           const prev = val ? JSON.parse(val) : [];
           const entry = { id: data.id, title: data.title, author: data.author, cover_url: data.cover_url ?? null };
@@ -430,11 +432,12 @@ export function BookDetailScreen({ route, navigation }) {
         }).catch(() => {});
       })
       .catch(() => {})
-      .finally(() => setIsLoading(false));
+      .finally(() => { if (!cancelled) setIsLoading(false); });
     loadReviews();
+    return () => { cancelled = true; };
   }, [bookId]);
 
-  const sorted = detail ? [...detail.listings].sort((a, b) => a.price - b.price) : [];
+  const sorted = detail?.listings?.length ? [...detail.listings].sort((a, b) => a.price - b.price) : [];
   const visibleSimilar = similarBooks.filter(b => !libraryIds.has(b.id));
   const visibleAuthor  = authorBooks.filter(b => !libraryIds.has(b.id));
 
@@ -616,7 +619,7 @@ export function BookDetailScreen({ route, navigation }) {
                       )}
                     </View>
                     <Text style={styles.similarBookTitle} numberOfLines={2}>{book.title}</Text>
-                    <Text style={styles.similarBookPrice}>{book.min_price} RSD</Text>
+                    {book.min_price != null && <Text style={styles.similarBookPrice}>{book.min_price} RSD</Text>}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -652,7 +655,7 @@ export function BookDetailScreen({ route, navigation }) {
                       )}
                     </View>
                     <Text style={styles.similarBookTitle} numberOfLines={2}>{book.title}</Text>
-                    <Text style={styles.similarBookPrice}>{book.min_price} RSD</Text>
+                    {book.min_price != null && <Text style={styles.similarBookPrice}>{book.min_price} RSD</Text>}
                   </TouchableOpacity>
                 ))}
               </ScrollView>

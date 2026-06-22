@@ -8,6 +8,7 @@ import * as Linking from 'expo-linking';
 import * as SecureStore from 'expo-secure-store';
 import { BASE_URL } from '../utils/api';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../utils/colors';
 
@@ -136,9 +137,10 @@ function useUnreadCount(userSession) {
 function CustomTabBar({ state, navigation }) {
   const { userSession } = useAuth();
   const [unreadCount] = useUnreadCount(userSession);
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 4) }]}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const icons = TAB_ICONS[route.name];
@@ -232,7 +234,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: colors.white,
     paddingTop: 12,
-    paddingBottom: 4,
     paddingHorizontal: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },

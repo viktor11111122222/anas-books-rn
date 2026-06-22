@@ -1,16 +1,8 @@
-import React, { useRef, useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Dimensions, StyleSheet } from 'react-native';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, useWindowDimensions, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../utils/colors';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_MARGIN = 16;
-const CARD_WIDTH = SCREEN_WIDTH - CARD_MARGIN * 2;
-
-const PEEK_CARD_WIDTH = SCREEN_WIDTH * 0.78;
-const PEEK_GAP = 12;
-const PEEK_SIDE_PADDING = (SCREEN_WIDTH - PEEK_CARD_WIDTH) / 2;
 
 const BLURHASH = 'L6PZfSi_.AyE_3t7t7R**0o#DgR4';
 
@@ -20,13 +12,15 @@ function cleanTitle(title) {
   return t.split(' - ')[0];
 }
 
-// Full-width auto-scrolling carousel (Najpopularnije)
 export function FeaturedCarousel({ books, onBookPress }) {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const CARD_MARGIN = 16;
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
   const timerRef = useRef(null);
 
-  useEffect(() => {
+  const resetTimer = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
     if (books.length < 2) return;
     timerRef.current = setInterval(() => {
       setCurrentIndex(prev => {
@@ -35,12 +29,17 @@ export function FeaturedCarousel({ books, onBookPress }) {
         return next;
       });
     }, 3500);
+  }, [books.length, SCREEN_WIDTH]);
+
+  useEffect(() => {
+    resetTimer();
     return () => clearInterval(timerRef.current);
-  }, [books.length]);
+  }, [resetTimer]);
 
   function onScrollEnd(e) {
     const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
     setCurrentIndex(index);
+    resetTimer();
   }
 
   if (!books.length) return null;
@@ -59,7 +58,7 @@ export function FeaturedCarousel({ books, onBookPress }) {
         {books.map((item, i) => (
           <TouchableOpacity
             key={i}
-            style={styles.slide}
+            style={[styles.slide, { width: SCREEN_WIDTH, paddingHorizontal: CARD_MARGIN }]}
             onPress={() => onBookPress(item)}
             activeOpacity={0.95}
           >
@@ -82,7 +81,7 @@ export function FeaturedCarousel({ books, onBookPress }) {
                 <Text style={styles.bandTitle} numberOfLines={2}>{cleanTitle(item.title)}</Text>
                 <View style={styles.bandRow}>
                   <Text style={styles.bandAuthor} numberOfLines={1}>{item.author}</Text>
-                  <Text style={styles.bandPrice}>od {item.min_price} RSD</Text>
+                  {item.min_price != null && <Text style={styles.bandPrice}>od {item.min_price} RSD</Text>}
                 </View>
               </View>
             </View>
@@ -105,28 +104,36 @@ export function FeaturedCarousel({ books, onBookPress }) {
   );
 }
 
-// Peek carousel — infinite loop, user swipes manually, adjacent cards peek on both sides
 export function PeekCarousel({ books, onBookPress }) {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const PEEK_CARD_WIDTH = SCREEN_WIDTH * 0.78;
+  const PEEK_GAP = 12;
+  const PEEK_SIDE_PADDING = (SCREEN_WIDTH - PEEK_CARD_WIDTH) / 2;
+  const STEP = PEEK_CARD_WIDTH + PEEK_GAP;
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollRef = useRef(null);
+  const didLayout = useRef(false);
   const n = books.length;
-  const STEP = PEEK_CARD_WIDTH + PEEK_GAP;
 
   if (n === 0) return null;
 
-  // Wrap: [last, ...books, first] so both edges loop
   const looped = n > 1 ? [books[n - 1], ...books, books[0]] : books;
+
+  function onLayout() {
+    if (didLayout.current || n <= 1) return;
+    didLayout.current = true;
+    scrollRef.current?.scrollTo({ x: STEP, animated: false });
+  }
 
   function onScrollEnd(e) {
     const x = e.nativeEvent.contentOffset.x;
     const raw = Math.round(x / STEP);
     if (n === 1) return;
     if (raw === 0) {
-      // hit clone of last → jump to real last
       scrollRef.current?.scrollTo({ x: n * STEP, animated: false });
       setCurrentIndex(n - 1);
     } else if (raw === n + 1) {
-      // hit clone of first → jump to real first
       scrollRef.current?.scrollTo({ x: STEP, animated: false });
       setCurrentIndex(0);
     } else {
@@ -144,6 +151,7 @@ export function PeekCarousel({ books, onBookPress }) {
         snapToInterval={STEP}
         disableIntervalMomentum
         contentOffset={{ x: n > 1 ? STEP : 0, y: 0 }}
+        onLayout={onLayout}
         contentContainerStyle={{ paddingHorizontal: PEEK_SIDE_PADDING }}
         onMomentumScrollEnd={onScrollEnd}
         onScrollEndDrag={onScrollEnd}
@@ -151,7 +159,7 @@ export function PeekCarousel({ books, onBookPress }) {
         {looped.map((item, i) => (
           <TouchableOpacity
             key={i}
-            style={[styles.peekSlide, i < looped.length - 1 && { marginRight: PEEK_GAP }]}
+            style={[{ width: PEEK_CARD_WIDTH }, i < looped.length - 1 && { marginRight: PEEK_GAP }]}
             onPress={() => onBookPress(item)}
             activeOpacity={0.95}
           >
@@ -175,7 +183,7 @@ export function PeekCarousel({ books, onBookPress }) {
               <View style={styles.peekInfo}>
                 <Text style={styles.peekTitle} numberOfLines={2}>{cleanTitle(item.title)}</Text>
                 <Text style={styles.peekAuthor} numberOfLines={1}>{item.author}</Text>
-                <Text style={styles.peekPrice}>od {item.min_price} RSD</Text>
+                {item.min_price != null && <Text style={styles.peekPrice}>od {item.min_price} RSD</Text>}
               </View>
             </View>
           </TouchableOpacity>
@@ -195,10 +203,7 @@ export function PeekCarousel({ books, onBookPress }) {
 }
 
 const styles = StyleSheet.create({
-  slide: {
-    width: SCREEN_WIDTH,
-    paddingHorizontal: CARD_MARGIN,
-  },
+  slide: {},
   card: {
     height: 220,
     borderRadius: 18,
@@ -249,10 +254,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Peek carousel
-  peekSlide: {
-    width: PEEK_CARD_WIDTH,
-  },
   peekCard: {
     flexDirection: 'row',
     height: 150,

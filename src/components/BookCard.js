@@ -161,14 +161,13 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
     borderRadius: 14,
-    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 3,
   },
-  coverContainer: { height: 160, backgroundColor: '#EEEEf8' },
+  coverContainer: { height: 160, backgroundColor: '#EEEEf8', borderTopLeftRadius: 14, borderTopRightRadius: 14, overflow: 'hidden' },
   cover: { width: '100%', height: '100%' },
   coverPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   heartBtn: {
