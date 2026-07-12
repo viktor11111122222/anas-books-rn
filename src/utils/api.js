@@ -4,13 +4,13 @@ import { Platform } from 'react-native';
 // If the network changes, run: ipconfig getifaddr en0
 export const BASE_URL =
   Platform.OS === 'android'
-    ? 'http://10.0.2.2:3000/api'
-    : 'http://172.20.10.5:3000/api';
+    ? 'http://10.0.2.2:3007/api'
+    : 'http://172.20.10.2:3007/api';
 
 export const FILE_BASE_URL =
   Platform.OS === 'android'
-    ? 'http://10.0.2.2:3000'
-    : 'http://172.20.10.5:3000';
+    ? 'http://10.0.2.2:3007'
+    : 'http://172.20.10.2:3007';
 
 export async function apiRequest(path, options = {}, token = null, timeoutMs = 10000) {
   const headers = {};
